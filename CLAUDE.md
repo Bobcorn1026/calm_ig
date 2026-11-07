@@ -21,7 +21,7 @@
 ## 技術決定
 
 - 平台：iOS only（Flutter），最低 iOS 17（App Intent 需要）
-- Bundle ID：`com.satori.calm_ig`
+- Bundle ID：`com.satori.calmIg`
 - 不用 Screen Time API（Family Controls）：免費 Apple ID 不能用，而且只能整個 app 擋
 - 不做全天截圖監控：ReplayKit 要手動開始、耗電發熱、會被系統殺掉、也關不掉 IG
 
