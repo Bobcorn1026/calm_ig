@@ -16,16 +16,21 @@ class FakeStore implements PassStore {
 }
 
 class FakeNotifier implements PassNotifier {
-  DateTime? scheduled;
+  bool allowed = true;
+  List<PassReminder> scheduled = [];
   int cancels = 0;
 
   @override
-  Future<void> scheduleEnd(DateTime at) async => scheduled = at;
+  Future<bool> requestPermission() async => allowed;
 
   @override
-  Future<void> cancelEnd() async {
+  Future<void> schedule(List<PassReminder> reminders) async =>
+      scheduled = [...scheduled, ...reminders];
+
+  @override
+  Future<void> cancelAll() async {
     cancels++;
-    scheduled = null;
+    scheduled = [];
   }
 }
 
@@ -72,7 +77,7 @@ void main() {
     expect(await pass.start(const Duration(minutes: 5)), isTrue);
     final end = now.add(const Duration(minutes: 5));
     expect(launcher.storeValueWhenOpened, end.millisecondsSinceEpoch);
-    expect(notifier.scheduled, end);
+    expect(notifier.scheduled.first.at, end);
     expect(pass.isActive, isTrue);
     expect(pass.remaining, const Duration(minutes: 5));
   });
@@ -91,14 +96,59 @@ void main() {
     await pass.end();
     expect(pass.isActive, isFalse);
     expect(store.value, isNull);
-    expect(notifier.cancels, 1);
+    expect(notifier.scheduled, isEmpty);
   });
 
   test('no Instagram installed → pass is rolled back', () async {
     launcher.installed = false;
     expect(await pass.start(const Duration(minutes: 5)), isFalse);
     expect(pass.isActive, isFalse);
-    expect(notifier.scheduled, isNull);
+    expect(notifier.scheduled, isEmpty);
+  });
+
+  test('a pass schedules 5 reminders, one per minute from the end', () async {
+    await pass.start(const Duration(minutes: 5));
+    final end = now.add(const Duration(minutes: 5));
+    expect(notifier.scheduled.map((r) => r.at), [
+      for (var i = 0; i < 5; i++) end.add(Duration(minutes: i)),
+    ]);
+    expect(notifier.scheduled.first.title, '放行時間到了');
+    expect(notifier.scheduled[1].body, contains('超過 1 分鐘'));
+    expect(notifier.scheduled[4].body, contains('超過 4 分鐘'));
+  });
+
+  test('starting a new pass replaces the old reminders', () async {
+    await pass.start(const Duration(minutes: 5));
+    await pass.start(const Duration(minutes: 10));
+    expect(notifier.scheduled, hasLength(reminderCount));
+    expect(notifier.scheduled.first.at, now.add(const Duration(minutes: 10)));
+  });
+
+  test('coming back after the pass ended stops the reminders', () async {
+    await pass.start(const Duration(minutes: 5));
+    now = now.add(const Duration(minutes: 6));
+    await pass.onResumed();
+    expect(notifier.scheduled, isEmpty);
+    expect(store.value, isNull);
+  });
+
+  test('coming back while the pass still runs keeps it', () async {
+    await pass.start(const Duration(minutes: 5));
+    now = now.add(const Duration(minutes: 2));
+    await pass.onResumed();
+    expect(pass.isActive, isTrue);
+    expect(notifier.scheduled, hasLength(reminderCount));
+  });
+
+  test('onResumed with no pass does nothing', () async {
+    await pass.onResumed();
+    expect(notifier.cancels, 0);
+  });
+
+  test('canRemind reflects notification permission', () async {
+    expect(await pass.canRemind(), isTrue);
+    notifier.allowed = false;
+    expect(await pass.canRemind(), isFalse);
   });
 
   test('listeners hear about start and end', () async {

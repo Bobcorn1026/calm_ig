@@ -1,6 +1,7 @@
 import 'package:calm_ig/browser/browser_page.dart';
 import 'package:calm_ig/main.dart';
 import 'package:calm_ig/onboarding/shortcut_setup_page.dart';
+import 'package:calm_ig/pass/pass_bar.dart';
 import 'package:calm_ig/pass/pass_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import '../pass/pass_controller_test.dart'
 void main() {
   late FakeStore store;
   late FakeLauncher launcher;
+  late FakeNotifier notifier;
   late PassController pass;
   late List<ValueChanged<String>> blockCallbacks;
 
@@ -19,7 +21,7 @@ void main() {
     launcher = FakeLauncher(store);
     pass = PassController(
       store: store,
-      notifier: FakeNotifier(),
+      notifier: notifier = FakeNotifier(),
       launcher: launcher,
     );
     blockCallbacks = [];
@@ -76,6 +78,49 @@ void main() {
     await tester.pump();
     expect(find.text('發限動'), findsOneWidget);
     expect(store.value, isNull);
+  });
+
+  testWidgets('notifications off: warn before opening Instagram', (
+    tester,
+  ) async {
+    notifier.allowed = false;
+    await tester.pumpWidget(app());
+    await tester.tap(find.text('發限動'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('5 分鐘'));
+    await tester.pumpAndSettle();
+    expect(find.text('通知被關掉了'), findsOneWidget);
+    expect(launcher.storeValueWhenOpened, isNull);
+
+    await tester.tap(find.text('照樣放行'));
+    await tester.pumpAndSettle();
+    expect(launcher.storeValueWhenOpened, isNotNull);
+    expect(find.textContaining('原生 IG 放行中'), findsOneWidget);
+  });
+
+  testWidgets('notifications off: 去設定 does not open Instagram', (tester) async {
+    notifier.allowed = false;
+    var settingsOpened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PassBar(
+            pass: pass,
+            onHelp: () {},
+            onOpenSettings: () async => settingsOpened = true,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('發限動'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10 分鐘'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('去設定'));
+    await tester.pumpAndSettle();
+    expect(settingsOpened, isTrue);
+    expect(launcher.storeValueWhenOpened, isNull);
+    expect(find.text('發限動'), findsOneWidget);
   });
 
   testWidgets('no Instagram installed shows a message', (tester) async {

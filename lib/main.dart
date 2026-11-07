@@ -19,6 +19,8 @@ Future<void> main() async {
     notifier: notifier,
     launcher: UrlInstagramLauncher(),
   );
+  // Opened by tapping a reminder after the app was closed: clean up.
+  await pass.onResumed();
   runApp(
     CalmIgApp(
       pass: pass,

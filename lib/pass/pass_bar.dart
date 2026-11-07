@@ -3,14 +3,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'pass_controller.dart';
+import 'pass_services.dart' show openAppSettings;
 
 /// The slim bar above the web view: app name, "post a story" pass button,
 /// help; or the countdown while a pass is running.
 class PassBar extends StatefulWidget {
-  const PassBar({super.key, required this.pass, required this.onHelp});
+  const PassBar({
+    super.key,
+    required this.pass,
+    required this.onHelp,
+    this.onOpenSettings = openAppSettings,
+  });
 
   final PassController pass;
   final VoidCallback onHelp;
+
+  /// Opens iOS Settings (to turn notifications on); replaced in tests.
+  final Future<void> Function() onOpenSettings;
 
   @override
   State<PassBar> createState() => _PassBarState();
@@ -37,8 +46,9 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Coming back from Instagram: redraw with the real remaining time.
-    if (state == AppLifecycleState.resumed) widget.pass.tick();
+    // Coming back from Instagram: stop leftover reminders if the pass is
+    // over, and redraw with the real remaining time.
+    if (state == AppLifecycleState.resumed) widget.pass.onResumed();
   }
 
   void _syncTicker() {
@@ -85,12 +95,40 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
       ),
     );
     if (length == null || !mounted) return;
+    if (!await widget.pass.canRemind()) {
+      if (!mounted) return;
+      final goAnyway = await _askWithoutReminders();
+      if (goAnyway != true) return;
+    }
     final opened = await widget.pass.start(length);
     if (!opened && mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('找不到 Instagram app')));
     }
   }
+
+  /// Notifications are off: reminders can't show. Returns true to open
+  /// Instagram anyway.
+  Future<bool?> _askWithoutReminders() => showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('通知被關掉了'),
+      content: const Text('這樣放行時間到了，清醒IG 沒辦法提醒你回來。\n要先去設定打開通知嗎？'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('照樣放行'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(context, false);
+            widget.onOpenSettings();
+          },
+          child: const Text('去設定'),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {

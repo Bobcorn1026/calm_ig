@@ -51,6 +51,8 @@ flutter build ios --release && flutter install --release -d <iPhone id>   # 裝�
 - 2026-11-08 再驗證：限動可正常打開播放（用使用者自己的限動測，避免留下已讀）、私訊收件匣正常載入（沒點開對話，避免標成已讀）
 - **通知**：app 內 WebView 沒有 Notification / PushManager / service worker，網頁版不可能推播 → 靠**原生 IG 的推播**（原生 IG 要留著、通知要開）。
   捷徑導流不會擋通知（Screen Time 才會）；點通知 → 原生 IG 打開 → 被導回清醒IG
+- 放行時間到：iOS 不准 app 把使用者從原生 IG 拉回來、捷徑背景 Wait 幾分鐘就被砍 → 改成**連續提醒**（到期起每分鐘 1 則、共 5 則，`remindersFor()`），
+  回到清醒IG 或按結束就 `cancelAll`。**沒有通知權限時 iOS 一則都不排**（整合測試 `integration_test/reminders_test.dart` 證實），所以放行前會先檢查權限並提示去設定
 - 未處理：「Use the app」橫幅（目前沒藏，可按 X 關）；送出私訊沒實測（不代使用者發訊息）
 - 除錯工具：debug build 有 `lib/browser/debug_js_bridge.dart`，把 JS 寫進 app 的 `tmp/debug_eval.js` 就能在 IG 頁面執行
 - 注意：`flutter test integration_test` 跑完會把 app 解除安裝（設定會重置；這次 IG 登入有保住，但別依賴）

@@ -8,14 +8,49 @@ const passUntilKey = 'pass_until_ms';
 /// How long a pass can be.
 const passLengths = [Duration(minutes: 5), Duration(minutes: 10)];
 
+/// iOS can't pull you out of Instagram when a pass ends, so calm_ig keeps
+/// reminding you: one notification at the end, then one every
+/// [reminderInterval], [reminderCount] in total, until you come back.
+const reminderCount = 5;
+const reminderInterval = Duration(minutes: 1);
+
+class PassReminder {
+  const PassReminder({
+    required this.at,
+    required this.title,
+    required this.body,
+  });
+
+  final DateTime at;
+  final String title;
+  final String body;
+
+  @override
+  String toString() => 'PassReminder($at, $title, $body)';
+}
+
+/// The reminders for a pass that ends at [end].
+List<PassReminder> remindersFor(DateTime end) => [
+  for (var i = 0; i < reminderCount; i++)
+    PassReminder(
+      at: end.add(reminderInterval * i),
+      title: i == 0 ? '放行時間到了' : '還在 IG 嗎？',
+      body: i == 0
+          ? '限動發完了嗎？點這裡回清醒IG。'
+          : '已經超過 ${(reminderInterval * i).inMinutes} 分鐘了，點這裡回清醒IG。',
+    ),
+];
+
 abstract interface class PassStore {
   int? readUntilMs();
   Future<void> writeUntilMs(int? ms);
 }
 
 abstract interface class PassNotifier {
-  Future<void> scheduleEnd(DateTime at);
-  Future<void> cancelEnd();
+  /// Asks for notification permission if needed; true when allowed.
+  Future<bool> requestPermission();
+  Future<void> schedule(List<PassReminder> reminders);
+  Future<void> cancelAll();
 }
 
 abstract interface class InstagramLauncher {
@@ -50,6 +85,9 @@ class PassController extends ChangeNotifier {
 
   Duration get remaining => until?.difference(_now()) ?? Duration.zero;
 
+  /// Whether reminders can be shown (asks the first time).
+  Future<bool> canRemind() => _notifier.requestPermission();
+
   /// Starts a pass and opens Instagram. Returns false (and cancels the pass)
   /// if Instagram could not be opened.
   Future<bool> start(Duration length) async {
@@ -57,7 +95,8 @@ class PassController extends ChangeNotifier {
     // Save first: the automation asks "is a pass active?" the moment
     // Instagram opens.
     await _store.writeUntilMs(end.millisecondsSinceEpoch);
-    await _notifier.scheduleEnd(end);
+    await _notifier.cancelAll();
+    await _notifier.schedule(remindersFor(end));
     notifyListeners();
     if (await _launcher.openInstagram()) return true;
     await this.end();
@@ -66,8 +105,19 @@ class PassController extends ChangeNotifier {
 
   Future<void> end() async {
     await _store.writeUntilMs(null);
-    await _notifier.cancelEnd();
+    await _notifier.cancelAll();
     notifyListeners();
+  }
+
+  /// Call when calm_ig comes back to the foreground. If the pass is over,
+  /// you are back: stop the remaining reminders. A pass that is still
+  /// running is left alone (you may go back to Instagram).
+  Future<void> onResumed() async {
+    if (_store.readUntilMs() != null && !isActive) {
+      await end();
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Lets listeners redraw the countdown (called by a UI timer).

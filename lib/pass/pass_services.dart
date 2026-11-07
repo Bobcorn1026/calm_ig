@@ -26,7 +26,6 @@ class PrefsPassStore implements PassStore {
 
 class LocalPassNotifier implements PassNotifier {
   final _plugin = FlutterLocalNotificationsPlugin();
-  static const _id = 1;
 
   Future<void> init() async {
     await _plugin.initialize(
@@ -42,26 +41,44 @@ class LocalPassNotifier implements PassNotifier {
   }
 
   @override
-  Future<void> scheduleEnd(DateTime at) async {
-    await _plugin
+  Future<bool> requestPermission() async {
+    final granted = await _plugin
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
         >()
         ?.requestPermissions(alert: true, sound: true);
-    await _plugin.zonedSchedule(
-      id: _id,
-      scheduledDate: tz.TZDateTime.from(at, tz.UTC),
-      notificationDetails: const NotificationDetails(
-        iOS: DarwinNotificationDetails(presentSound: true),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      title: '放行時間到了',
-      body: '限動發完了嗎？點這裡回清醒IG。',
-    );
+    return granted ?? false;
   }
 
   @override
-  Future<void> cancelEnd() => _plugin.cancel(id: _id);
+  Future<void> schedule(List<PassReminder> reminders) async {
+    for (final (i, r) in reminders.indexed) {
+      await _plugin.zonedSchedule(
+        id: i + 1,
+        scheduledDate: tz.TZDateTime.from(r.at, tz.UTC),
+        notificationDetails: const NotificationDetails(
+          iOS: DarwinNotificationDetails(
+            presentSound: true,
+            // One thread, so the reminders stack instead of piling up.
+            threadIdentifier: 'pass-reminders',
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        title: r.title,
+        body: r.body,
+      );
+    }
+  }
+
+  // calm_ig only ever schedules pass reminders, so clearing everything is
+  // safe; it also removes delivered ones from Notification Center.
+  @override
+  Future<void> cancelAll() => _plugin.cancelAll();
+}
+
+/// Opens iOS Settings on calm_ig's page (to turn notifications back on).
+Future<void> openAppSettings() async {
+  await launchUrl(Uri.parse('app-settings:'));
 }
 
 class UrlInstagramLauncher implements InstagramLauncher {
