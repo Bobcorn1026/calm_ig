@@ -43,7 +43,10 @@ flutter build ios --simulator --debug                 # → build/ios/iphonesimu
 
 - 已用登入的真 IG 驗證（2026-11-07）：Reels 連結是 `/reels/` 且被藏、`/explore/search/` 存在、`?variant=following` 有效、
   朋友的單支 reel 不能往下滑；首頁改成「限動列＋看追蹤中貼文連結」，推薦動態整塊藏掉（Following 頁沒有限動列，所以不能拿它當首頁）
-- **還沒驗證**：從首頁點限動是否正常打開播放、私訊頁實際收發、「Use the app」橫幅（目前沒藏）
+- 2026-11-08 再驗證：限動可正常打開播放（用使用者自己的限動測，避免留下已讀）、私訊收件匣正常載入（沒點開對話，避免標成已讀）
+- **通知**：app 內 WebView 沒有 Notification / PushManager / service worker，網頁版不可能推播 → 靠**原生 IG 的推播**（原生 IG 要留著、通知要開）。
+  捷徑導流不會擋通知（Screen Time 才會）；點通知 → 原生 IG 打開 → 被導回清醒IG
+- 未處理：「Use the app」橫幅（目前沒藏，可按 X 關）；送出私訊沒實測（不代使用者發訊息）
 - 除錯工具：debug build 有 `lib/browser/debug_js_bridge.dart`，把 JS 寫進 app 的 `tmp/debug_eval.js` 就能在 IG 頁面執行
 - 注意：`flutter test integration_test` 跑完會把 app 解除安裝（設定會重置；這次 IG 登入有保住，但別依賴）
 - 捷徑步驟的中文按鈕名稱是從英文版模擬器翻的，要在使用者的 iPhone（繁中）上對一次
