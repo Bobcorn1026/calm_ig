@@ -35,11 +35,12 @@
 flutter analyze && flutter test                       # 含 Node 跑的 JS 規則測試
 flutter test integration_test -d <simulator-id>       # 在 WKWebView 裡跑過濾腳本（假 IG 頁）
 flutter build ios --simulator --debug                 # → build/ios/iphonesimulator/Runner.app
-flutter build ios --release && flutter install --release -d <iPhone id>   # 裝到實機（flutter devices 查 id）
+flutter build ios --release && xcrun devicectl device install app --device <iPhone id> build/ios/iphoneos/Runner.app   # 裝到實機，保留資料（flutter devices 查 id）
 ```
 
 裝實機用終端機就好：Xcode GUI 若同時開著別的 Flutter 專案（如 habit_quest），會報「Couldn't load … already opened from another project」。
 免費帳號簽章（Team VT22VAA9AV）每 7 天失效，再跑一次上面那行即可。
+**不要用 `flutter install`**：它會先解除安裝，清掉 app 內的 IG 登入、通知權限與設定。
 
 模擬器測 App Intent：用 `xcrun simctl spawn booted defaults write "<app data container>/Library/Preferences/com.satori.calmIg" flutter.pass_until_ms -int <ms>`
 寫入（container 用 `xcrun simctl get_app_container booted com.satori.calmIg data`）。**不要直接改 plist 檔**，cfprefsd 有快取會讀到舊值。
