@@ -17,7 +17,9 @@ void main() {
           .replaceAll(RegExp(r';$'), ''),
     );
     expect(json['blockedPrefixes'], ['/reels', '/shorts']);
-    expect(json['homePath'], '/?variant=following');
+    expect(json['homePath'], '/');
+    expect(json['followingPath'], '/?variant=following');
+    expect(json['feedVariants'], ['following', 'favorites']);
     expect(script, endsWith('/* body */'));
   });
 

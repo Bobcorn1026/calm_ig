@@ -57,8 +57,37 @@ void main() {
     expect(await js(display('search-link')), isNot('none'));
     expect(await js(display('single-reel-link')), isNot('none'));
 
-    // Sponsored posts and everything after the end of the feed are hidden.
+    // Home: stories row stays, the feed next to it is hidden, and a link
+    // to the Following feed appears right under the stories.
     await js('window.__calmIg.sweep()');
+    expect(
+      await js('document.documentElement.hasAttribute("data-calm-home")'),
+      isTrue,
+    );
+    expect(await js(display('stories-row')), isNot('none'));
+    expect(await js(display('feed')), 'none');
+    expect(await js(display('calm-ig-following')), isNot('none'));
+    expect(
+      await js(
+        'document.getElementById("calm-ig-following").getAttribute("href")',
+      ),
+      '/?variant=following',
+    );
+    expect(
+      await js('document.getElementById("stories-row").nextElementSibling.id'),
+      'calm-ig-following',
+    );
+
+    // Following feed (same path, same DOM): posts show again, minus
+    // sponsored ones and everything after the end of the feed.
+    await js('history.pushState({}, "", "/?variant=following")');
+    await js('window.__calmIg.sweep()');
+    expect(
+      await js('document.documentElement.hasAttribute("data-calm-home")'),
+      isFalse,
+    );
+    expect(await js(display('feed')), isNot('none'));
+    expect(await js(display('calm-ig-following')), 'none');
     expect(await js(display('friend-post')), isNot('none'));
     expect(await js(display('friend-post-2')), isNot('none'));
     expect(await js(display('sponsored-post')), 'none');

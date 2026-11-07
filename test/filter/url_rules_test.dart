@@ -41,14 +41,15 @@ void main() {
 
   group('allowed pages', () {
     for (final url in [
-      'https://www.instagram.com/?variant=following',
       'https://www.instagram.com/direct/inbox/',
       'https://www.instagram.com/direct/t/1234567890/',
       'https://www.instagram.com/stories/some.friend/3456/',
       'https://www.instagram.com/some.friend/',
       'https://www.instagram.com/p/Cxyz123/',
-      // A single reel a friend sent in a DM (singular "reel").
+      'https://www.instagram.com/some.friend/p/Cxyz123/',
+      // A single reel a friend posted or sent in a DM (singular "reel").
       'https://www.instagram.com/reel/Cxyz123/',
+      'https://www.instagram.com/some.friend/reel/Cxyz123/',
       'https://www.instagram.com/explore/search/',
       'https://www.instagram.com/accounts/login/',
       // Not a prefix match.
@@ -59,16 +60,19 @@ void main() {
   });
 
   group('home', () {
-    test('plain home goes to the Following feed', () {
+    test('home and its feed variants all load (the script hides the feed)', () {
       for (final url in [
         'https://www.instagram.com/',
         'https://www.instagram.com',
-        'https://www.instagram.com/?variant=home',
+        'https://www.instagram.com/?variant=following',
+        'https://www.instagram.com/?variant=favorites',
       ]) {
-        final d = decide(url);
-        expect(d.action, UrlAction.redirect, reason: url);
-        expect(d.target.toString(), config.homeUrl, reason: url);
+        expect(decide(url).action, UrlAction.allow, reason: url);
       }
+    });
+
+    test('blocked pages fall back to home', () {
+      expect(config.homeUrl, 'https://www.instagram.com/');
     });
   });
 

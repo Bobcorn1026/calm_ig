@@ -41,8 +41,11 @@ flutter build ios --simulator --debug                 # → build/ios/iphonesimu
 
 ## 已知問題 / 待辦
 
-- **還沒用登入的真 IG 驗證**（要使用者在模擬器 WebView 裡自己登入）：
-  `?variant=following` 在行動版網頁是否有效、`/explore/search/` 是否存在、推薦/贊助文字標籤是否對得上、Reels 分頁連結是否真的是 `/reels/`
+- 已用登入的真 IG 驗證（2026-11-07）：Reels 連結是 `/reels/` 且被藏、`/explore/search/` 存在、`?variant=following` 有效、
+  朋友的單支 reel 不能往下滑；首頁改成「限動列＋看追蹤中貼文連結」，推薦動態整塊藏掉（Following 頁沒有限動列，所以不能拿它當首頁）
+- **還沒驗證**：從首頁點限動是否正常打開播放、私訊頁實際收發、「Use the app」橫幅（目前沒藏）
+- 除錯工具：debug build 有 `lib/browser/debug_js_bridge.dart`，把 JS 寫進 app 的 `tmp/debug_eval.js` 就能在 IG 頁面執行
+- 注意：`flutter test integration_test` 跑完會把 app 解除安裝（設定會重置；這次 IG 登入有保住，但別依賴）
 - 捷徑步驟的中文按鈕名稱是從英文版模擬器翻的，要在使用者的 iPhone（繁中）上對一次
 - 捷徑自動化＋原生 IG 的整段流程只能在實機測（模擬器沒有 IG）；需要使用者在 Xcode 登入免費 Apple ID
 - `flutter_inappwebview_ios` 不支援 Swift Package Manager，Flutter 有警告「未來會變成錯誤」；到時候要換套件或等它更新

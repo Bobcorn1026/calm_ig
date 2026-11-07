@@ -10,9 +10,6 @@ enum UrlAction {
   /// Drop it, tell the user, and go to [UrlDecision.target].
   block,
 
-  /// Quietly load [UrlDecision.target] instead.
-  redirect,
-
   /// Open it in the system browser.
   external,
 }
@@ -68,9 +65,6 @@ UrlDecision decideUrl(Uri uri, FilterConfig config, {bool isMainFrame = true}) {
         );
       }
     }
-  }
-  if (path == '/' && uri.queryParameters['variant'] != 'following') {
-    return UrlDecision(UrlAction.redirect, uri, Uri.parse(config.homeUrl));
   }
   return UrlDecision(UrlAction.allow, uri);
 }

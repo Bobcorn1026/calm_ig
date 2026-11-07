@@ -4,7 +4,10 @@
 class FilterConfig {
   const FilterConfig({
     this.origin = 'https://www.instagram.com',
-    this.homePath = '/?variant=following',
+    this.homePath = '/',
+    this.followingPath = '/?variant=following',
+    this.feedVariants = const ['following', 'favorites'],
+    this.followingLinkText = '首頁推薦已隱藏 · 看追蹤中的貼文 →',
     this.blockedPrefixes = const ['/reels'],
     this.searchPath = '/explore/search/',
     this.searchRedirectPrefixes = const ['/explore'],
@@ -36,8 +39,18 @@ class FilterConfig {
   /// Instagram's web origin, without a trailing slash.
   final String origin;
 
-  /// Where "home" goes: the chronological Following feed.
+  /// The start page: Instagram's home, where the stories row lives. Its
+  /// algorithmic feed is hidden by the filter script.
   final String homePath;
+
+  /// Chronological posts from accounts you follow (linked from home).
+  final String followingPath;
+
+  /// `?variant=` values on "/" that are real feeds and stay visible.
+  final List<String> feedVariants;
+
+  /// Text of the link the script adds under the stories row on home.
+  final String followingLinkText;
 
   /// Paths (and everything below them) that are never shown.
   final List<String> blockedPrefixes;
@@ -62,6 +75,9 @@ class FilterConfig {
 
   Map<String, Object> toJson() => {
     'homePath': homePath,
+    'followingPath': followingPath,
+    'feedVariants': feedVariants,
+    'followingLinkText': followingLinkText,
     'blockedPrefixes': blockedPrefixes,
     'searchPath': searchPath,
     'searchRedirectPrefixes': searchRedirectPrefixes,

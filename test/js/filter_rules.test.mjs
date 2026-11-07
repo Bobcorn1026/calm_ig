@@ -7,7 +7,9 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../assets/filters/instagram.js', import.meta.url), 'utf8');
 const config = {
-  homePath: '/?variant=following',
+  homePath: '/',
+  followingPath: '/?variant=following',
+  feedVariants: ['following', 'favorites'],
   blockedPrefixes: ['/reels'],
   searchPath: '/explore/search/',
   searchRedirectPrefixes: ['/explore'],
@@ -34,7 +36,7 @@ function fakeBrowser(startHref) {
     replaceState(_s, _t, u) { href = new URL(u, href); },
   };
   const store = new Map();
-  const element = () => ({ appendChild() {}, setAttribute() {} });
+  const element = () => ({ appendChild() {}, setAttribute() {}, removeAttribute() {} });
   const window = {
     __CALM_IG_CONFIG__: config,
     flutter_inappwebview: { callHandler: (_n, e) => calls.notify.push(e) },
@@ -69,37 +71,42 @@ function fakeBrowser(startHref) {
 }
 
 test('decide() matches the Dart rules', () => {
-  const { window } = fakeBrowser('https://www.instagram.com/?variant=following');
-  const d = (path, search) => plain(window.__calmIg.decide(path, search));
-  assert.deepEqual(d('/reels/', ''), { target: '/?variant=following', blocked: true });
-  assert.deepEqual(d('/reels/C9abc/', ''), { target: '/?variant=following', blocked: true });
-  assert.deepEqual(d('/explore/', ''), { target: '/explore/search/', blocked: true });
-  assert.deepEqual(d('/explore/tags/cats/', ''), { target: '/explore/search/', blocked: true });
-  assert.deepEqual(d('/', ''), { target: '/?variant=following', blocked: false });
-  assert.deepEqual(d('/', '?variant=home'), { target: '/?variant=following', blocked: false });
-  for (const allowed of ['/explore/search/', '/reel/Cxyz/', '/direct/inbox/', '/reelsfan/', '/p/abc/']) {
-    assert.equal(d(allowed, ''), null, allowed);
+  const { window } = fakeBrowser('https://www.instagram.com/');
+  const d = (path) => plain(window.__calmIg.decide(path));
+  assert.deepEqual(d('/reels/'), { target: '/' });
+  assert.deepEqual(d('/reels/C9abc/'), { target: '/' });
+  assert.deepEqual(d('/reels/audio/123/'), { target: '/' });
+  assert.deepEqual(d('/explore/'), { target: '/explore/search/' });
+  assert.deepEqual(d('/explore/tags/cats/'), { target: '/explore/search/' });
+  for (const allowed of ['/', '/explore/search/', '/reel/Cxyz/', '/friend/reel/Cxyz/',
+    '/friend/p/abc/', '/direct/inbox/', '/reelsfan/', '/p/abc/']) {
+    assert.equal(d(allowed), null, allowed);
   }
-  assert.equal(d('/', '?variant=following'), null);
+});
+
+test('isHomeFeed() tells home apart from the Following / Favorites feeds', () => {
+  const { window } = fakeBrowser('https://www.instagram.com/');
+  const h = window.__calmIg.isHomeFeed;
+  assert.equal(h('/', ''), true);
+  assert.equal(h('/', '?variant=home'), true);
+  assert.equal(h('/', '?variant=following'), false);
+  assert.equal(h('/', '?variant=favorites'), false);
+  assert.equal(h('/direct/inbox/', ''), false);
 });
 
 test('a client-side jump to Reels is reverted and reported', () => {
-  const { history, calls } = fakeBrowser('https://www.instagram.com/?variant=following');
+  const { history, calls } = fakeBrowser('https://www.instagram.com/');
   history.pushState({}, '', '/reels/C9abc/');
-  assert.deepEqual(calls.replace, ['/?variant=following']);
+  assert.deepEqual(calls.replace, ['/']);
   assert.deepEqual(plain(calls.notify), [{ kind: 'blocked', path: '/reels/C9abc/' }]);
 });
 
-test('DMs and stories are left alone', () => {
-  const { history, calls } = fakeBrowser('https://www.instagram.com/?variant=following');
+test('DMs, stories and the Following feed are left alone', () => {
+  const { history, calls } = fakeBrowser('https://www.instagram.com/');
   history.pushState({}, '', '/direct/inbox/');
   history.pushState({}, '', '/stories/friend/123/');
+  history.pushState({}, '', '/?variant=following');
+  history.pushState({}, '', '/');
   assert.deepEqual(calls.replace, []);
   assert.deepEqual(calls.notify, []);
-});
-
-test('stops redirecting home if Instagram keeps dropping the variant', () => {
-  const { history, calls } = fakeBrowser('https://www.instagram.com/?variant=following');
-  for (let i = 0; i < 6; i++) history.replaceState({}, '', '/');
-  assert.equal(calls.replace.length, 3);
 });

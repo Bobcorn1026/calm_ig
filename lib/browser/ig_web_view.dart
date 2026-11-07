@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../filter/filter_config.dart';
 import '../filter/url_rules.dart';
+import 'debug_js_bridge.dart';
 
 /// Instagram's mobile website inside a WKWebView, with the filter script
 /// injected before any page script runs.
@@ -42,7 +43,13 @@ class IgWebView extends StatefulWidget {
 
 class _IgWebViewState extends State<IgWebView> {
   InAppWebViewController? _controller;
-  final _recentRedirects = <DateTime>[];
+  DebugJsBridge? _debugBridge;
+
+  @override
+  void dispose() {
+    _debugBridge?.stop();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +80,10 @@ class _IgWebViewState extends State<IgWebView> {
       ),
       onWebViewCreated: (controller) {
         _controller = controller;
+        // Only in debug builds and only for the real site (not tests).
+        if (kDebugMode && widget.debugInitialHtml == null) {
+          _debugBridge = DebugJsBridge(controller)..start();
+        }
         controller.addJavaScriptHandler(
           handlerName: 'calmIg',
           callback: (args) {
@@ -119,17 +130,6 @@ class _IgWebViewState extends State<IgWebView> {
         return NavigationActionPolicy.CANCEL;
       case UrlAction.block:
         widget.onBlocked(decision.uri.path);
-        await _load(decision.target!);
-        return NavigationActionPolicy.CANCEL;
-      case UrlAction.redirect:
-        // If Instagram keeps bouncing us off the target (e.g. it drops
-        // ?variant=following), give up instead of looping.
-        final now = DateTime.now();
-        _recentRedirects.removeWhere(
-          (t) => now.difference(t) > const Duration(seconds: 10),
-        );
-        if (_recentRedirects.length >= 3) return NavigationActionPolicy.ALLOW;
-        _recentRedirects.add(now);
         await _load(decision.target!);
         return NavigationActionPolicy.CANCEL;
       case UrlAction.external:
