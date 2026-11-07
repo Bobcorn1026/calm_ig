@@ -16,6 +16,8 @@ class IgWebView extends StatefulWidget {
     required this.config,
     required this.filterScript,
     required this.onBlocked,
+    this.debugInitialHtml,
+    this.onPageLoaded,
   });
 
   final FilterConfig config;
@@ -25,6 +27,14 @@ class IgWebView extends StatefulWidget {
 
   /// Called whenever a Reels / Explore page was stopped.
   final ValueChanged<String> onBlocked;
+
+  /// Integration tests load this HTML (as if served from [FilterConfig.origin])
+  /// instead of the real site.
+  @visibleForTesting
+  final String? debugInitialHtml;
+
+  /// Called after each page finishes loading.
+  final ValueChanged<InAppWebViewController>? onPageLoaded;
 
   @override
   State<IgWebView> createState() => _IgWebViewState();
@@ -37,7 +47,15 @@ class _IgWebViewState extends State<IgWebView> {
   @override
   Widget build(BuildContext context) {
     return InAppWebView(
-      initialUrlRequest: URLRequest(url: WebUri(widget.config.homeUrl)),
+      initialUrlRequest: widget.debugInitialHtml == null
+          ? URLRequest(url: WebUri(widget.config.homeUrl))
+          : null,
+      initialData: widget.debugInitialHtml == null
+          ? null
+          : InAppWebViewInitialData(
+              data: widget.debugInitialHtml!,
+              baseUrl: WebUri(widget.config.homeUrl),
+            ),
       initialUserScripts: UnmodifiableListView([
         UserScript(
           source: widget.filterScript,
@@ -66,6 +84,7 @@ class _IgWebViewState extends State<IgWebView> {
           },
         );
       },
+      onLoadStop: (controller, _) => widget.onPageLoaded?.call(controller),
       shouldOverrideUrlLoading: (controller, action) async {
         final url = action.request.url;
         if (url == null) return NavigationActionPolicy.ALLOW;
