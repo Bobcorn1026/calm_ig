@@ -2,6 +2,7 @@
 
 通用規則見上層 `~/Developer/CLAUDE.md`（開發迴圈、何時發問、git 規則）。這份只記這個 app 自己的事。
 完整計畫：`~/.claude/plans/ios-app-doom-scrolling-1-resilient-tower.md`
+接手工作先讀 `HANDOFF.md`（現在做到哪、下一步；新對話用 `/pickup calm_ig`）。進度只寫在 HANDOFF.md，這份只放穩定的決定。
 
 ## 目標
 
