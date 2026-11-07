@@ -12,10 +12,10 @@
 
 ## 功能清單
 
-- [ ] 乾淨版 IG：WebView 殼、保留登入
-- [ ] 過濾：擋 `/reels/`、`/explore/`、推薦與贊助貼文；首頁導到追蹤中動態 `/?variant=following`
-- [ ] 放行原生 IG（5／10 分鐘）＋到期通知＋ App Intent「放行中嗎？」
-- [ ] 捷徑自動化設定教學頁
+- [x] 乾淨版 IG：WebView 殼、保留登入（`lib/browser/`）
+- [x] 過濾：擋 `/reels`、`/explore`（改導搜尋）、推薦與贊助貼文；首頁導到 `/?variant=following`（`lib/filter/`、`assets/filters/instagram.js`）
+- [x] 放行原生 IG（5／10 分鐘）＋到期通知＋ App Intent「放行中嗎？」（`lib/pass/`、`ios/Runner/InstagramPassIntent.swift`）
+- [x] 捷徑自動化設定教學頁（`lib/onboarding/`，依 iOS 27 新版捷徑寫）
 - [ ] （第二階段，未決定）放行期間用 ReplayKit 截圖監控 Reels
 
 ## 技術決定
@@ -24,14 +24,26 @@
 - Bundle ID：`com.satori.calmIg`
 - 不用 Screen Time API（Family Controls）：免費 Apple ID 不能用，而且只能整個 app 擋
 - 不做全天截圖監控：ReplayKit 要手動開始、耗電發熱、會被系統殺掉、也關不掉 IG
+- 過濾規則只有一份：`FilterConfig`（Dart）→ JSON 注入 JS；`test/js/filter_rules.test.mjs`（Node）確保兩邊一致
+- 放行到期時間存 shared_preferences 的 `pass_until_ms`（UserDefaults 裡是 `flutter.pass_until_ms`），App Intent 直接讀它
+- Swift 檔加進 Runner target 用 xcodeproj gem（`ruby -e 'require "xcodeproj"…'`），不手改 pbxproj
 
 ## 常用指令
 
 ```bash
-flutter analyze && flutter test
-flutter build ios --simulator --debug     # → build/ios/iphonesimulator/Runner.app
+flutter analyze && flutter test                       # 含 Node 跑的 JS 規則測試
+flutter test integration_test -d <simulator-id>       # 在 WKWebView 裡跑過濾腳本（假 IG 頁）
+flutter build ios --simulator --debug                 # → build/ios/iphonesimulator/Runner.app
 ```
+
+模擬器測 App Intent：用 `xcrun simctl spawn booted defaults write "<app data container>/Library/Preferences/com.satori.calmIg" flutter.pass_until_ms -int <ms>`
+寫入（container 用 `xcrun simctl get_app_container booted com.satori.calmIg data`）。**不要直接改 plist 檔**，cfprefsd 有快取會讀到舊值。
 
 ## 已知問題 / 待辦
 
-- （無）
+- **還沒用登入的真 IG 驗證**（要使用者在模擬器 WebView 裡自己登入）：
+  `?variant=following` 在行動版網頁是否有效、`/explore/search/` 是否存在、推薦/贊助文字標籤是否對得上、Reels 分頁連結是否真的是 `/reels/`
+- 捷徑步驟的中文按鈕名稱是從英文版模擬器翻的，要在使用者的 iPhone（繁中）上對一次
+- 捷徑自動化＋原生 IG 的整段流程只能在實機測（模擬器沒有 IG）；需要使用者在 Xcode 登入免費 Apple ID
+- `flutter_inappwebview_ios` 不支援 Swift Package Manager，Flutter 有警告「未來會變成錯誤」；到時候要換套件或等它更新
+- App 圖示還是 Flutter 預設
