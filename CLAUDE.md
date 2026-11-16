@@ -70,7 +70,8 @@ flutter build ios --release && xcrun devicectl device install app --device <iPho
 - 實機崩潰／被殺紀錄：`xcrun devicectl device info files --device <id> --domain-type systemCrashLogs` 列出，`device copy from` 抓回來
 - 未處理：「Use the app」橫幅（目前沒藏，可按 X 關）；送出私訊沒實測（不代使用者發訊息）
 - 除錯工具：debug build 有 `lib/browser/debug_js_bridge.dart`，把 JS 寫進 app 的 `tmp/debug_eval.js` 就能在 IG 頁面執行
-- 注意：`flutter test integration_test` 跑完會把 app 解除安裝（設定會重置；這次 IG 登入有保住，但別依賴）
+- 注意：`flutter test integration_test` 跑完會把 app 解除安裝（設定會重置；這次 IG 登入有保住，但別依賴）。
+  所以 `reminders_test.dart` 每次都會卡在系統的通知權限對話框 → 用 iOS Simulator 工具截圖、點 Allow 才會繼續（`simctl privacy` 沒有通知這項）
 - 捷徑步驟的中文按鈕名稱是從英文版模擬器翻的，要在使用者的 iPhone（繁中）上對一次
 - 捷徑自動化＋原生 IG 的整段流程只能在實機測（模擬器沒有 IG）；需要使用者在 Xcode 登入免費 Apple ID
 - `flutter_inappwebview_ios` 不支援 Swift Package Manager，Flutter 有警告「未來會變成錯誤」；到時候要換套件或等它更新
