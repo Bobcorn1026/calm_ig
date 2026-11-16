@@ -165,6 +165,24 @@ void main() {
     expect(find.text('7 次'), findsOneWidget);
   });
 
+  testWidgets('coming back to the app picks up new bounces right away', (
+    tester,
+  ) async {
+    await _pumpPage(tester, _history);
+    expect(find.text('2 次'), findsOneWidget);
+    // While the app is in the background, the App Intent counts a bounce.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    SharedPreferences.setMockInitialValues({
+      ..._history,
+      StatsStore.bouncesKey(_day(0)): 3,
+    });
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    // The quota stepper also says "3 次"; the bounce row is the other one.
+    expect(find.text('2 次'), findsNothing);
+    expect(find.text('3 次'), findsNWidgets(2));
+  });
+
   testWidgets('charts the last 7 days, or 30 after switching', (tester) async {
     await _pumpPage(tester, _history);
 

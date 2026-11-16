@@ -53,7 +53,7 @@ Duration _average(List<Duration> days) {
   return counted.fold(Duration.zero, (a, b) => a + b) ~/ counted.length;
 }
 
-class _StatsPageState extends State<StatsPage> {
+class _StatsPageState extends State<StatsPage> with WidgetsBindingObserver {
   late final Timer _ticker;
   late final ValueNotifier<Duration> _usageToday;
   late String _day;
@@ -66,7 +66,14 @@ class _StatsPageState extends State<StatsPage> {
     _day = dayKey(widget.clock());
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     widget.settings.addListener(_redraw);
+    WidgetsBinding.instance.addObserver(this);
     _reload();
+  }
+
+  /// Back from another app: the App Intent may have counted bounces.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _reload();
   }
 
   @override
@@ -81,6 +88,7 @@ class _StatsPageState extends State<StatsPage> {
   @override
   void dispose() {
     _ticker.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     widget.settings.removeListener(_redraw);
     _usageToday.dispose();
     super.dispose();
