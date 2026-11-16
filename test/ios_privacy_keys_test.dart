@@ -10,9 +10,8 @@ void main() {
   final plist = File('ios/Runner/Info.plist').readAsStringSync();
 
   String? valueOf(String key) {
-    final match = RegExp(
-      '<key>$key</key>\\s*<string>([^<]*)</string>',
-    ).firstMatch(plist);
+    final match = RegExp('<key>$key</key>\\s*<string>([^<]*)</string>')
+        .firstMatch(plist);
     return match?.group(1);
   }
 
