@@ -111,6 +111,10 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
       if (goAnyway != true) return;
     }
     final opened = await widget.pass.start(length);
+    // Time in the native app during a pass doesn't end the session: coming
+    // back within 5 minutes after the pass continues the stopwatch.
+    final until = widget.pass.until;
+    if (opened && until != null) widget.stopwatch?.allowBreakUntil(until);
     if (!opened && mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('找不到 Instagram app')));

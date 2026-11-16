@@ -1,8 +1,24 @@
 import 'package:calm_ig/browser/reload_handle.dart';
+import 'package:calm_ig/session/prefs_session_store.dart';
 import 'package:calm_ig/session/session_clock.dart';
 import 'package:calm_ig/session/session_stopwatch.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class MemoryStore implements SessionStore {
+  SessionSnapshot? saved;
+  int saves = 0;
+
+  @override
+  SessionSnapshot? load() => saved;
+
+  @override
+  Future<void> save(SessionSnapshot snapshot) async {
+    saves++;
+    saved = snapshot;
+  }
+}
 
 void main() {
   late DateTime now;
@@ -94,6 +110,98 @@ void main() {
       ..attach();
     expect(foreground.isRunning, isTrue);
     foreground.detach();
+  });
+
+  group('coming back from a pass (延續計時)', () {
+    test('back within 5 minutes after the pass ends: continues', () {
+      advance(const Duration(minutes: 3));
+      sw.allowBreakUntil(now.add(const Duration(minutes: 10)));
+      sw.pause(); // native Instagram opens
+      advance(const Duration(minutes: 14)); // 10 min pass + 4 min late
+      sw.resume();
+      expect(sw.elapsed, const Duration(minutes: 3));
+    });
+
+    test('back 5+ minutes after the pass ends: new session', () {
+      advance(const Duration(minutes: 3));
+      sw.allowBreakUntil(now.add(const Duration(minutes: 5)));
+      sw.pause();
+      advance(const Duration(minutes: 10)); // 5 min pass + 5 min late
+      sw.resume();
+      expect(sw.elapsed, Duration.zero);
+    });
+
+    test('the allowance is used once', () {
+      advance(const Duration(minutes: 1));
+      sw.allowBreakUntil(now.add(const Duration(minutes: 5)));
+      sw.pause();
+      advance(const Duration(minutes: 6));
+      sw.resume();
+      expect(sw.breakAllowedUntil, isNull);
+      advance(const Duration(minutes: 1));
+      sw.pause();
+      advance(const Duration(minutes: 5)); // ordinary break, no pass
+      sw.resume();
+      expect(sw.elapsed, Duration.zero);
+    });
+  });
+
+  group('saved session (iOS closed the app in the background)', () {
+    test('pause saves; a new stopwatch picks the session up', () {
+      final store = MemoryStore();
+      final first = SessionStopwatch(clock: () => now, store: store);
+      advance(const Duration(minutes: 7));
+      first.allowBreakUntil(now.add(const Duration(minutes: 10)));
+      first.pause();
+      expect(store.saved!.banked, const Duration(minutes: 7));
+      expect(store.saved!.breakAllowedUntil, isNotNull);
+
+      // App killed during the pass; relaunched 12 minutes later.
+      advance(const Duration(minutes: 12));
+      final second = SessionStopwatch(
+        clock: () => now,
+        startRunning: false,
+        store: store,
+      );
+      expect(second.isRunning, isFalse);
+      second.resume();
+      expect(second.elapsed, const Duration(minutes: 7));
+    });
+
+    test('an old saved session starts over', () {
+      final store = MemoryStore()
+        ..saved = SessionSnapshot(
+          banked: const Duration(minutes: 40),
+          pausedAt: now.subtract(const Duration(hours: 8)),
+        );
+      final sw2 = SessionStopwatch(
+        clock: () => now,
+        startRunning: false,
+        store: store,
+      );
+      sw2.resume();
+      expect(sw2.elapsed, Duration.zero);
+    });
+
+    test('PrefsSessionStore round-trips', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = PrefsSessionStore(prefs);
+      expect(store.load(), isNull);
+      await store.save(
+        SessionSnapshot(
+          banked: const Duration(seconds: 95),
+          pausedAt: now,
+          breakAllowedUntil: now.add(const Duration(minutes: 5)),
+        ),
+      );
+      final loaded = store.load()!;
+      expect(loaded.banked, const Duration(seconds: 95));
+      expect(loaded.pausedAt, now);
+      expect(loaded.breakAllowedUntil, now.add(const Duration(minutes: 5)));
+      await store.save(SessionSnapshot(banked: Duration.zero, pausedAt: now));
+      expect(store.load()!.breakAllowedUntil, isNull);
+    });
   });
 
   test('formatStopwatch', () {

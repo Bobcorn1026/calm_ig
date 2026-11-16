@@ -7,6 +7,7 @@ import 'onboarding/shortcut_setup_page.dart';
 import 'pass/pass_bar.dart';
 import 'pass/pass_controller.dart';
 import 'pass/pass_services.dart';
+import 'session/prefs_session_store.dart';
 import 'session/session_stopwatch.dart';
 
 const setupDoneKey = 'shortcut_setup_done';
@@ -23,7 +24,10 @@ Future<void> main() async {
   );
   // Opened by tapping a reminder after the app was closed: clean up.
   await pass.onResumed();
-  final stopwatch = SessionStopwatch(startRunning: false)..attach();
+  final stopwatch = SessionStopwatch(
+    startRunning: false,
+    store: PrefsSessionStore(prefs),
+  )..attach();
   runApp(
     CalmIgApp(
       pass: pass,

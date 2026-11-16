@@ -5,6 +5,24 @@ import 'package:flutter/widgets.dart';
 /// locking the phone for a moment — just pause it.
 const sessionResetAfter = Duration(minutes: 5);
 
+/// What survives iOS closing the app while it is in the background.
+class SessionSnapshot {
+  const SessionSnapshot({
+    required this.banked,
+    required this.pausedAt,
+    this.breakAllowedUntil,
+  });
+
+  final Duration banked;
+  final DateTime pausedAt;
+  final DateTime? breakAllowedUntil;
+}
+
+abstract interface class SessionStore {
+  SessionSnapshot? load();
+  Future<void> save(SessionSnapshot snapshot);
+}
+
 /// Counts how long calm_ig has been on screen in this session.
 ///
 /// Runs only while the app is in the foreground. It watches the app
@@ -13,16 +31,30 @@ const sessionResetAfter = Duration(minutes: 5);
 class SessionStopwatch with WidgetsBindingObserver {
   /// [startRunning] is for tests; the app starts paused and lets [attach]
   /// start it only if the app is really in the foreground.
+  ///
+  /// With a [store], the session is saved whenever the app leaves the
+  /// foreground and picked up again on the next launch, so iOS closing the
+  /// app in the background doesn't reset the stopwatch.
   SessionStopwatch({
     DateTime Function()? clock,
     this.resetAfter = sessionResetAfter,
     bool startRunning = true,
-  }) : _now = clock ?? DateTime.now {
-    if (startRunning) _runningSince = _now();
+    SessionStore? store,
+  }) : _now = clock ?? DateTime.now,
+       _store = store {
+    final saved = store?.load();
+    if (saved != null) {
+      _banked = saved.banked;
+      _pausedAt = saved.pausedAt;
+      _breakAllowedUntil = saved.breakAllowedUntil;
+    } else if (startRunning) {
+      _runningSince = _now();
+    }
   }
 
   final DateTime Function() _now;
   final Duration resetAfter;
+  final SessionStore? _store;
 
   /// Time counted before the current running stretch.
   Duration _banked = Duration.zero;
@@ -33,7 +65,14 @@ class SessionStopwatch with WidgetsBindingObserver {
   /// When the stopwatch was paused; null while running.
   DateTime? _pausedAt;
 
+  /// A planned break (a pass to the native Instagram app) lasts until here;
+  /// the 5-minute reset is counted from this time instead of the pause.
+  DateTime? _breakAllowedUntil;
+
   bool get isRunning => _runningSince != null;
+
+  @visibleForTesting
+  DateTime? get breakAllowedUntil => _breakAllowedUntil;
 
   Duration get elapsed {
     final since = _runningSince;
@@ -47,17 +86,46 @@ class SessionStopwatch with WidgetsBindingObserver {
     _banked += now.difference(since);
     _runningSince = null;
     _pausedAt = now;
+    _save();
   }
 
   void resume() {
     if (_runningSince != null) return;
     final now = _now();
     final pausedAt = _pausedAt;
-    if (pausedAt != null && now.difference(pausedAt) >= resetAfter) {
-      _banked = Duration.zero;
+    if (pausedAt != null) {
+      final breakUntil = _breakAllowedUntil;
+      final breakStart = breakUntil != null && breakUntil.isAfter(pausedAt)
+          ? breakUntil
+          : pausedAt;
+      if (now.difference(breakStart) >= resetAfter) _banked = Duration.zero;
     }
     _runningSince = now;
     _pausedAt = null;
+    _breakAllowedUntil = null;
+  }
+
+  /// Leaving until [until] doesn't end the session: coming back within
+  /// [resetAfter] after it continues the stopwatch. Used for passes.
+  void allowBreakUntil(DateTime until) {
+    _breakAllowedUntil = until;
+    _save();
+  }
+
+  void _save() {
+    final pausedAt = _pausedAt;
+    final store = _store;
+    if (store == null) return;
+    // While running there is nothing to resume from yet; the next pause
+    // saves. A planned break started from the foreground is saved by that
+    // pause too, but saving here keeps it if the app dies first.
+    store.save(
+      SessionSnapshot(
+        banked: elapsed,
+        pausedAt: pausedAt ?? _now(),
+        breakAllowedUntil: _breakAllowedUntil,
+      ),
+    );
   }
 
   /// Starts listening to the app lifecycle. Lifecycle changes that happened

@@ -57,7 +57,8 @@ flutter build ios --release && xcrun devicectl device install app --device <iPho
 - **Info.plist 一定要有相機／麥克風／相簿的 UsageDescription**：IG 私訊上傳會開相機，少了 iOS 直接 SIGABRT（2026-11-12 實機 crash log）。`test/ios_privacy_keys_test.dart` 守著
 - 重新載入：下拉（PullToRefreshController＋alwaysBounceVertical）、上方 ↻ 鈕、載入失敗畫面。**WKWebView 從沒載入成功時 `reload()` 是 no-op** → `reloadTarget()` 改載首頁。
   WebContent 被 iOS 殺掉（實機 Jetsam log 很多）→ `onWebContentProcessDidTerminate` 自動重載。模擬器自動化測下拉要慢慢拖（快速 touch_path 不會觸發）
-- 碼錶（`lib/session/`）：只算前景時間，離開 ≥ 5 分鐘歸零；所以放行（≥ 5 分）回來也會歸零——要不要改是產品決定，還沒問
+- 碼錶（`lib/session/`）：只算前景時間，離開 ≥ 5 分鐘歸零；**放行期間不算離開**（使用者 2026-11-16 選「延續計時」：放行結束後 5 分鐘內回來就接續）。
+  狀態存 shared_preferences（`session_*`），iOS 在背景把 app 關掉也能接續
 - 實機崩潰／被殺紀錄：`xcrun devicectl device info files --device <id> --domain-type systemCrashLogs` 列出，`device copy from` 抓回來
 - 未處理：「Use the app」橫幅（目前沒藏，可按 X 關）；送出私訊沒實測（不代使用者發訊息）
 - 除錯工具：debug build 有 `lib/browser/debug_js_bridge.dart`，把 JS 寫進 app 的 `tmp/debug_eval.js` 就能在 IG 頁面執行

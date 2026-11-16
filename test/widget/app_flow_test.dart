@@ -172,6 +172,20 @@ void main() {
     expect((clock.dy - name.dy).abs(), lessThan(4));
   });
 
+  testWidgets('starting a pass lets the stopwatch continue afterwards', (
+    tester,
+  ) async {
+    final stopwatch = SessionStopwatch();
+    await tester.pumpWidget(app(stopwatch: stopwatch));
+    await tester.tap(find.text('發限動'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10 分鐘'));
+    await tester.pumpAndSettle();
+    expect(stopwatch.breakAllowedUntil, pass.until);
+    await tester.tap(find.text('結束'));
+    await tester.pump();
+  });
+
   testWidgets('reload button reaches the web view', (tester) async {
     final handle = ReloadHandle();
     var reloads = 0;
