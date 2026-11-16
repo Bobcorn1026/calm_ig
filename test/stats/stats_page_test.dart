@@ -23,6 +23,7 @@ Map<String, Object> _record(
   Duration overtime = Duration.zero,
   Map<String, int> intents = const {},
   int bounces = 0,
+  int? quota,
 }) => {
   StatsStore.statsKey(_day(daysAgo)): jsonEncode(
     DayStats(
@@ -32,6 +33,7 @@ Map<String, Object> _record(
       overQuotaPasses: overQuota,
       overtime: overtime,
       intents: intents,
+      quota: quota,
     ).toJson(),
   ),
   if (bounces > 0) StatsStore.bouncesKey(_day(daysAgo)): bounces,
@@ -201,7 +203,7 @@ void main() {
     expect(_tooltip(usage, 5), '11/15 週日 · 40 分');
 
     final passes = charts[1];
-    expect(_lineLabel(passes), '額度 3 次');
+    expect(_lineLabel(passes), '目前額度 3 次');
     final today = passes.data.barGroups.last.barRods.single;
     expect(today.toY, 4);
     expect(today.rodStackItems, hasLength(2));
@@ -262,12 +264,37 @@ void main() {
     expect(harness.settings.passQuota, 4);
     expect(tester.widget<Text>(value).data, '4 次');
     expect(find.text('已放行 4 / 額度 4 次（超額 1 次）'), findsOneWidget);
-    expect(_lineLabel(_charts(tester)[1]), '額度 4 次');
+    expect(_lineLabel(_charts(tester)[1]), '目前額度 4 次');
 
     await _tap(tester, find.byTooltip('減少額度'));
     await _tap(tester, find.byTooltip('減少額度'));
     expect(harness.settings.passQuota, 2);
     expect(tester.widget<Text>(value).data, '2 次');
+  });
+
+  testWidgets('a raise after the first pass waits until tomorrow', (
+    tester,
+  ) async {
+    await _pumpPage(tester, {
+      AppSettings.passQuotaKey: 3,
+      ..._record(0, passes: 3, quota: 3),
+    });
+    expect(find.text('已放行 3 / 額度 3 次'), findsOneWidget);
+    expect(find.textContaining('今天仍是'), findsNothing);
+
+    await _tap(tester, find.byTooltip('增加額度'));
+    await _tap(tester, find.byTooltip('增加額度'));
+    // The setting says 5, but today still has 3.
+    expect(find.text('已放行 3 / 額度 3 次'), findsOneWidget);
+    expect(find.textContaining('今天仍是 3 次，明天起 5 次'), findsOneWidget);
+    expect(_lineLabel(_charts(tester)[1]), '目前額度 5 次');
+
+    // Lowering applies at once and the note goes away.
+    for (var i = 0; i < 3; i++) {
+      await _tap(tester, find.byTooltip('減少額度'));
+    }
+    expect(find.text('已放行 3 / 額度 2 次'), findsOneWidget);
+    expect(find.textContaining('今天仍是'), findsNothing);
   });
 
   testWidgets('quota stops at 0 and at the maximum', (tester) async {
@@ -313,7 +340,7 @@ void main() {
       expect(chart.data.titlesData.bottomTitles.sideTitles.showTitles, isTrue);
     }
     expect(_lineLabel(charts[0]), isNull); // no average yet
-    expect(_lineLabel(charts[1]), '額度 3 次');
+    expect(_lineLabel(charts[1]), '目前額度 3 次');
   });
 
   group('fits a 375×812 phone', () {

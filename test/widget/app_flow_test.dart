@@ -1,6 +1,7 @@
 import 'package:calm_ig/browser/browser_page.dart';
 import 'package:calm_ig/browser/web_view_handle.dart';
 import 'package:calm_ig/filter/filter_health.dart';
+import 'package:calm_ig/intent/intent_prompt.dart';
 import 'package:calm_ig/main.dart';
 import 'package:calm_ig/onboarding/shortcut_setup_page.dart';
 import 'package:calm_ig/pass/pass_controller.dart';
@@ -128,6 +129,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('今天的放行額度用完了（3/3）'), findsOneWidget);
 
+    // The sentence can't be copied, and the field doesn't take a paste.
+    expect(find.byType(SelectableText), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(find.byType(TextField))
+          .enableInteractiveSelection,
+      isFalse,
+    );
+
     FilledButton goButton() =>
         tester.widget<FilledButton>(find.widgetWithText(FilledButton, '放行'));
     expect(goButton().onPressed, isNull);
@@ -155,6 +165,96 @@ void main() {
     await tester.pumpAndSettle();
     expect(launcher.storeValueWhenOpened, isNull);
     expect(today().passes, 0);
+  });
+
+  testWidgets('a pass that runs out on screen ends itself', (tester) async {
+    var now = DateTime.now();
+    pass = PassController(
+      store: store,
+      notifier: notifier,
+      launcher: launcher,
+      clock: () => now,
+    );
+    await tester.pumpWidget(app());
+    await openPassSheet(tester);
+    await tester.tap(find.text('5 分鐘'));
+    await tester.pumpAndSettle();
+    expect(notifier.scheduled, isNotEmpty);
+
+    now = now.add(const Duration(minutes: 6));
+    await tester.pump(const Duration(seconds: 1)); // the countdown ticks
+    await tester.pumpAndSettle();
+    expect(find.text('發限動'), findsOneWidget);
+    expect(store.value, isNull);
+    expect(notifier.scheduled, isEmpty); // no "還在 IG 嗎？" left
+    expect(tracker.passEnd, isNull);
+  });
+
+  testWidgets('run does nothing while a pass is active', (tester) async {
+    await pass.start(const Duration(minutes: 5));
+    final flow = PassFlow(
+      pass: pass,
+      stats: stats,
+      settings: settings,
+      tracker: tracker,
+    );
+    bool? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => result = await flow.run(context),
+            child: const Text('go'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    expect(result, isFalse);
+    expect(find.text('5 分鐘'), findsNothing);
+    expect(today().passes, 0);
+  });
+
+  group('「這次要做什麼？」→ 發限動', () {
+    Finder menuItem(String label) => find.descendant(
+      of: find.byType(IntentPrompt),
+      matching: find.text(label),
+    );
+
+    testWidgets('backing out brings the menu back, records nothing', (
+      tester,
+    ) async {
+      await settings.setPassQuota(0);
+      tracker.askIntent.value = true;
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      await tester.tap(menuItem('發限動'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('5 分鐘'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('算了'));
+      await tester.pumpAndSettle();
+
+      expect(launcher.storeValueWhenOpened, isNull);
+      expect(tracker.askIntent.value, isTrue);
+      expect(find.text('這次要做什麼？'), findsOneWidget);
+      expect(today().intents, isEmpty);
+    });
+
+    testWidgets('a real pass records the choice', (tester) async {
+      tracker.askIntent.value = true;
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      await tester.tap(menuItem('發限動'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('5 分鐘'));
+      await tester.pumpAndSettle();
+
+      expect(launcher.storeValueWhenOpened, isNotNull);
+      expect(tracker.askIntent.value, isFalse);
+      expect(today().intents, {'發限動': 1});
+    });
   });
 
   testWidgets('notifications off: warn before opening Instagram', (

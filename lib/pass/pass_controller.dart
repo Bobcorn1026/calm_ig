@@ -83,6 +83,10 @@ class PassController extends ChangeNotifier {
 
   bool get isActive => until != null;
 
+  /// A pass whose time ran out but that was never ended (its reminders may
+  /// still be scheduled).
+  bool get isExpired => _store.readUntilMs() != null && !isActive;
+
   Duration get remaining => until?.difference(_now()) ?? Duration.zero;
 
   /// Whether reminders can be shown (asks the first time).
@@ -113,7 +117,7 @@ class PassController extends ChangeNotifier {
   /// you are back: stop the remaining reminders. A pass that is still
   /// running is left alone (you may go back to Instagram).
   Future<void> onResumed() async {
-    if (_store.readUntilMs() != null && !isActive) {
+    if (isExpired) {
       await end();
     } else {
       notifyListeners();

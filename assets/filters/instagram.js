@@ -227,11 +227,15 @@
   function checkHealth() {
     var issues = [];
     // A visible "Reels" entry that our rules don't block: the path changed.
+    // Only top-level paths count: a profile's "/<user>/reels/" tab is also
+    // labelled Reels but is not the entry we hide.
     var links = document.querySelectorAll('a[href]');
     for (var i = 0; i < links.length; i++) {
       var a = links[i];
       var label = (a.getAttribute('aria-label') || a.textContent || '').trim();
-      if (/^reels$/i.test(label) && isVisible(a) &&
+      if (!/^reels$/i.test(label) || !isVisible(a)) continue;
+      var url = parse(a.getAttribute('href'));
+      if (url && /^\/[^\/]+\/?$/.test(url.pathname) &&
           !isBlockedHref(a.getAttribute('href'))) {
         issues.push('reels-link-visible');
         break;

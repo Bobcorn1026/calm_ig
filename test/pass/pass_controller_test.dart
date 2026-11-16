@@ -140,6 +140,16 @@ void main() {
     expect(notifier.scheduled, hasLength(reminderCount));
   });
 
+  test('isExpired: ran out but never ended', () async {
+    expect(pass.isExpired, isFalse);
+    await pass.start(const Duration(minutes: 5));
+    expect(pass.isExpired, isFalse);
+    now = now.add(const Duration(minutes: 6));
+    expect(pass.isExpired, isTrue);
+    await pass.end();
+    expect(pass.isExpired, isFalse);
+  });
+
   test('onResumed with no pass does nothing', () async {
     await pass.onResumed();
     expect(notifier.cancels, 0);

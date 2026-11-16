@@ -122,6 +122,8 @@ class _StatsPageState extends State<StatsPage> with WidgetsBindingObserver {
     final now = widget.clock();
     final today = widget.stats.today(now);
     final quota = widget.settings.passQuota;
+    // A raise made after today's first pass only counts from tomorrow.
+    final todayQuota = effectiveQuota(today, quota);
     final recent = widget.stats.recent(now, _range);
     final dates = lastDays(now, _range);
     final colors = ChartColors.of(context);
@@ -142,7 +144,7 @@ class _StatsPageState extends State<StatsPage> with WidgetsBindingObserver {
               date: now,
               usage: _usageToday,
               today: today,
-              quota: quota,
+              quota: todayQuota,
             ),
             const SizedBox(height: 24),
             Row(
@@ -175,7 +177,12 @@ class _StatsPageState extends State<StatsPage> with WidgetsBindingObserver {
                 children: [
                   ListTile(
                     title: const Text('每日放行額度'),
-                    subtitle: const Text('用完要打一句話才放行'),
+                    subtitle: todayQuota == quota
+                        ? const Text('用完要打一句話才放行')
+                        : Text(
+                            '用完要打一句話才放行\n'
+                            '今天仍是 $todayQuota 次，明天起 $quota 次',
+                          ),
                     trailing: _QuotaStepper(
                       value: quota,
                       onChanged: widget.settings.setPassQuota,
@@ -264,7 +271,7 @@ class _StatsPageState extends State<StatsPage> with WidgetsBindingObserver {
           _LegendKey(color: colors.over, label: '超額'),
           _LegendKey(
             color: theme.colorScheme.onSurfaceVariant,
-            label: '每日額度',
+            label: '目前額度',
             dashed: true,
           ),
         ],
@@ -292,7 +299,7 @@ class _StatsPageState extends State<StatsPage> with WidgetsBindingObserver {
               : '沒有超時';
           return '放行 ${d.passes} 次（$over）\n$overtime';
         },
-        reference: ReferenceLine(quota.toDouble(), '額度 $quota 次'),
+        reference: ReferenceLine(quota.toDouble(), '目前額度 $quota 次'),
       ),
     );
   }

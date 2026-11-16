@@ -31,8 +31,10 @@ class PassFlow {
   final DateTime Function() clock;
 
   /// Pick a length, get past the quota and notification checks, then open
-  /// the native app. Records the pass if Instagram opened.
-  Future<void> run(BuildContext context) async {
+  /// the native app. Records the pass if Instagram opened. Returns whether
+  /// a pass really started.
+  Future<bool> run(BuildContext context) async {
+    if (pass.isActive) return false;
     final today = stats.today(clock());
     final quota = effectiveQuota(today, settings.passQuota);
     final overQuota = today.passes >= quota;
@@ -42,7 +44,7 @@ class PassFlow {
       showDragHandle: true,
       builder: (context) => _PassLengthSheet(today: today, quota: quota),
     );
-    if (length == null || !context.mounted) return;
+    if (length == null || !context.mounted) return false;
 
     if (overQuota) {
       final confirmed = await showDialog<bool>(
@@ -50,17 +52,17 @@ class PassFlow {
         builder: (context) =>
             _OverQuotaDialog(used: today.passes, quota: quota),
       );
-      if (confirmed != true || !context.mounted) return;
+      if (confirmed != true || !context.mounted) return false;
     }
 
     if (!await pass.canRemind()) {
-      if (!context.mounted) return;
+      if (!context.mounted) return false;
       final goAnyway = await showDialog<bool>(
         context: context,
         builder: (context) =>
             _NoRemindersDialog(onOpenSettings: onOpenSettings),
       );
-      if (goAnyway != true) return;
+      if (goAnyway != true) return false;
     }
 
     final startedAt = clock();
@@ -74,6 +76,7 @@ class PassFlow {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('找不到 Instagram app')));
     }
+    return opened;
   }
 
   /// 結束 in the top bar: the pass is over, and you are back.
@@ -170,7 +173,7 @@ class _OverQuotaDialogState extends State<_OverQuotaDialog> {
         children: [
           const Text('真的需要的話，請輸入：'),
           const SizedBox(height: 4),
-          const SelectableText(
+          const Text(
             '「$overQuotaPhrase」',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
@@ -178,6 +181,8 @@ class _OverQuotaDialogState extends State<_OverQuotaDialog> {
           TextField(
             controller: _text,
             autofocus: true,
+            // No copy-paste: the point is to type it out.
+            enableInteractiveSelection: false,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),

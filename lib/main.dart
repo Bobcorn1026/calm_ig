@@ -124,13 +124,24 @@ class CalmIgApp extends StatelessWidget {
   );
 
   Future<void> _choose(BuildContext context, IntentOption option) async {
+    if (option.action == IntentAction.pass) {
+      // Only counts once a pass really started; backing out brings the menu
+      // back instead of leaving the page unguarded.
+      final started = await flow.run(context);
+      if (started) {
+        await stats.recordIntent(DateTime.now(), option.label);
+      } else {
+        tracker.askIntent.value = true;
+      }
+      return;
+    }
     await stats.recordIntent(DateTime.now(), option.label);
     if (!context.mounted) return;
     switch (option.action) {
       case IntentAction.open:
         await handle.open(option.path);
       case IntentAction.pass:
-        await flow.run(context);
+        break; // handled above
       case IntentAction.browse:
         break; // the prompt itself makes you wait a moment
     }

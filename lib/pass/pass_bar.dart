@@ -75,6 +75,15 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
     } else {
       _ticker?.cancel();
       _ticker = null;
+      // The pass ran out while calm_ig is on screen: you are not in
+      // Instagram, so end it here (closes the tracker's pass and cancels
+      // the remaining "還在 IG 嗎？" reminders). In the background this waits
+      // for [didChangeAppLifecycleState].
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (_pass.isExpired &&
+          (state == null || state == AppLifecycleState.resumed)) {
+        unawaited(widget.flow.end());
+      }
     }
   }
 

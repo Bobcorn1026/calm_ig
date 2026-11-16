@@ -139,6 +139,20 @@ test('health: Reels moved to a new path is caught', () => {
   assert.deepEqual(plain(window.__calmIg.checkHealth()), ['reels-link-visible']);
 });
 
+test("health: a profile's own Reels tab is not a false alarm", () => {
+  const { window } = fakeBrowser('https://www.instagram.com/someone/', {
+    links: [el({ href: '/someone/reels/', label: 'Reels' })],
+  });
+  assert.deepEqual(plain(window.__calmIg.checkHealth()), []);
+});
+
+test('health: an absolute top-level Reels link is still caught', () => {
+  const { window } = fakeBrowser('https://www.instagram.com/direct/inbox/', {
+    links: [el({ href: 'https://www.instagram.com/clips/', text: 'Reels' })],
+  });
+  assert.deepEqual(plain(window.__calmIg.checkHealth()), ['reels-link-visible']);
+});
+
 test('health: home posts showing or no stories row is caught', () => {
   const { window } = fakeBrowser('https://www.instagram.com/', {
     articles: [el({ visible: true })],
