@@ -11,11 +11,14 @@ const sessionResetAfter = Duration(minutes: 5);
 /// lifecycle itself (call [attach] once), so it keeps counting correctly no
 /// matter which widgets are on screen.
 class SessionStopwatch with WidgetsBindingObserver {
+  /// [startRunning] is for tests; the app starts paused and lets [attach]
+  /// start it only if the app is really in the foreground.
   SessionStopwatch({
     DateTime Function()? clock,
     this.resetAfter = sessionResetAfter,
+    bool startRunning = true,
   }) : _now = clock ?? DateTime.now {
-    _runningSince = _now();
+    if (startRunning) _runningSince = _now();
   }
 
   final DateTime Function() _now;
@@ -57,7 +60,14 @@ class SessionStopwatch with WidgetsBindingObserver {
     _pausedAt = null;
   }
 
-  void attach() => WidgetsBinding.instance.addObserver(this);
+  /// Starts listening to the app lifecycle. Lifecycle changes that happened
+  /// before this call are not replayed, so start from the current state.
+  void attach() {
+    final binding = WidgetsBinding.instance..addObserver(this);
+    if (binding.lifecycleState == AppLifecycleState.resumed) {
+      resume();
+    }
+  }
 
   void detach() => WidgetsBinding.instance.removeObserver(this);
 

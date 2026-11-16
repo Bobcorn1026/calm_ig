@@ -66,6 +66,36 @@ void main() {
     expect(sw.elapsed, const Duration(minutes: 1));
   });
 
+  test('startRunning: false waits for resume', () {
+    final idle = SessionStopwatch(clock: () => now, startRunning: false);
+    advance(const Duration(minutes: 10));
+    expect(idle.isRunning, isFalse);
+    expect(idle.elapsed, Duration.zero);
+    idle.resume();
+    advance(const Duration(seconds: 3));
+    expect(idle.elapsed, const Duration(seconds: 3));
+  });
+
+  testWidgets('attach starts it only when the app is in the foreground', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    final background = SessionStopwatch(clock: () => now, startRunning: false)
+      ..attach();
+    expect(background.isRunning, isFalse);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    expect(background.isRunning, isTrue);
+    background.detach();
+
+    final foreground = SessionStopwatch(clock: () => now, startRunning: false)
+      ..attach();
+    expect(foreground.isRunning, isTrue);
+    foreground.detach();
+  });
+
   test('formatStopwatch', () {
     expect(formatStopwatch(Duration.zero), '0:00');
     expect(formatStopwatch(const Duration(seconds: 7)), '0:07');

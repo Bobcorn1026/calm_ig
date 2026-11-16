@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
@@ -22,6 +23,7 @@ class IgWebView extends StatefulWidget {
     this.reloadHandle,
     this.debugInitialHtml,
     this.onPageLoaded,
+    this.onLoadFailed,
   });
 
   final FilterConfig config;
@@ -43,6 +45,9 @@ class IgWebView extends StatefulWidget {
   /// Called after each page finishes loading.
   final ValueChanged<InAppWebViewController>? onPageLoaded;
 
+  /// Called each time the page fails to load and the retry screen shows.
+  final ValueChanged<WebResourceErrorType>? onLoadFailed;
+
   @override
   State<IgWebView> createState() => _IgWebViewState();
 }
@@ -55,8 +60,15 @@ class _IgWebViewState extends State<IgWebView> {
   /// half-loaded page, thanks to `alwaysBounceVertical`).
   late final _pullToRefresh = PullToRefreshController(
     settings: PullToRefreshSettings(color: Colors.grey),
-    onRefresh: _reload,
+    onRefresh: _onPullToRefresh,
   );
+
+  /// Stops the pull-to-refresh spinner if no load event ever ends it.
+  Timer? _refreshTimeout;
+
+  /// Whether any page has finished loading. Before that, WKWebView's
+  /// `reload()` does nothing (there is no page to reload).
+  bool _hasLoaded = false;
 
   /// Set when the page failed to load; shows [LoadFailureView].
   String? _failure;
@@ -73,20 +85,39 @@ class _IgWebViewState extends State<IgWebView> {
   @override
   void dispose() {
     widget.reloadHandle?.detach(_reload);
+    _refreshTimeout?.cancel();
     _debugBridge?.stop();
     super.dispose();
   }
 
+  Future<void> _onPullToRefresh() async {
+    _refreshTimeout?.cancel();
+    _refreshTimeout = Timer(
+      const Duration(seconds: 15),
+      _pullToRefresh.endRefreshing,
+    );
+    await _reload();
+  }
+
+  void _endRefreshing() {
+    _refreshTimeout?.cancel();
+    _pullToRefresh.endRefreshing();
+  }
+
   Future<void> _reload() async {
     final controller = _controller;
-    if (controller == null) return;
-    final failed = _failedUrl;
+    if (controller == null || !mounted) return;
+    final target = reloadTarget(
+      failedUrl: _failedUrl?.uriValue,
+      hasLoaded: _hasLoaded,
+      homeUrl: Uri.parse(widget.config.homeUrl),
+    );
     setState(() {
       _failure = null;
       _failedUrl = null;
     });
-    if (failed != null) {
-      await controller.loadUrl(urlRequest: URLRequest(url: failed));
+    if (target != null) {
+      await controller.loadUrl(urlRequest: URLRequest(url: WebUri.uri(target)));
     } else {
       await controller.reload();
     }
@@ -153,11 +184,12 @@ class _IgWebViewState extends State<IgWebView> {
         );
       },
       onLoadStop: (controller, _) {
-        _pullToRefresh.endRefreshing();
+        _hasLoaded = true;
+        _endRefreshing();
         widget.onPageLoaded?.call(controller);
       },
       onReceivedError: (controller, request, error) {
-        _pullToRefresh.endRefreshing();
+        _endRefreshing();
         if (!isPageLoadFailure(
           error.type,
           isMainFrame: request.isForMainFrame ?? false,
@@ -168,10 +200,11 @@ class _IgWebViewState extends State<IgWebView> {
           _failure = loadFailureMessage(error.type);
           _failedUrl = request.url;
         });
+        widget.onLoadFailed?.call(error.type);
       },
       // iOS kills the page's process under memory pressure (e.g. while you
       // are in the native Instagram app); the web view is then blank.
-      onWebContentProcessDidTerminate: (controller) => controller.reload(),
+      onWebContentProcessDidTerminate: (_) => _reload(),
       shouldOverrideUrlLoading: (controller, action) async {
         final url = action.request.url;
         if (url == null) return NavigationActionPolicy.ALLOW;

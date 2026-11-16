@@ -39,6 +39,49 @@ void main() {
     });
   });
 
+  test('certificate errors (Wi-Fi login pages) count and say so', () {
+    expect(
+      isPageLoadFailure(
+        WebResourceErrorType.SERVER_CERTIFICATE_UNTRUSTED,
+        isMainFrame: true,
+      ),
+      isTrue,
+    );
+    expect(
+      loadFailureMessage(WebResourceErrorType.SERVER_CERTIFICATE_UNTRUSTED),
+      contains('Wi-Fi'),
+    );
+  });
+
+  group('reloadTarget', () {
+    final home = Uri.parse('https://www.instagram.com/');
+    final failed = Uri.parse('https://www.instagram.com/direct/inbox/');
+
+    test('retries the page that failed', () {
+      expect(
+        reloadTarget(failedUrl: failed, hasLoaded: true, homeUrl: home),
+        failed,
+      );
+    });
+
+    test(
+      'nothing loaded yet: load home (WKWebView reload would do nothing)',
+      () {
+        expect(
+          reloadTarget(failedUrl: null, hasLoaded: false, homeUrl: home),
+          home,
+        );
+      },
+    );
+
+    test('a page is showing: plain reload', () {
+      expect(
+        reloadTarget(failedUrl: null, hasLoaded: true, homeUrl: home),
+        isNull,
+      );
+    });
+  });
+
   test('loadFailureMessage', () {
     expect(
       loadFailureMessage(WebResourceErrorType.NOT_CONNECTED_TO_INTERNET),

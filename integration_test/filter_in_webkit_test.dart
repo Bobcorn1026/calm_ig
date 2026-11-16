@@ -106,6 +106,7 @@ void main() {
       allowedHosts: ['invalid'],
     );
     final script = await loadFilterScript(config);
+    final failures = <WebResourceErrorType>[];
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -113,18 +114,24 @@ void main() {
             config: config,
             filterScript: script,
             onBlocked: (_) {},
+            onLoadFailed: failures.add,
           ),
         ),
       ),
     );
-    await _waitUntil(tester, () => find.text('IG 載入失敗').evaluate().isNotEmpty);
+    await _waitUntil(tester, () => failures.isNotEmpty);
+    await tester.pump();
+    expect(failures.first, WebResourceErrorType.HOST_LOOKUP);
+    expect(find.text('IG 載入失敗'), findsOneWidget);
     expect(find.text('重新載入'), findsOneWidget);
 
-    // Retrying hides the overlay, then the same failure brings it back.
+    // 重新載入 really tries again (here it fails again, so the screen stays).
+    // Checking that the screen briefly disappears would race the instant
+    // DNS failure, so count load attempts instead.
     await tester.tap(find.text('重新載入'));
+    await _waitUntil(tester, () => failures.length >= 2);
     await tester.pump();
-    expect(find.text('IG 載入失敗'), findsNothing);
-    await _waitUntil(tester, () => find.text('IG 載入失敗').evaluate().isNotEmpty);
+    expect(find.text('IG 載入失敗'), findsOneWidget);
   });
 }
 

@@ -23,7 +23,7 @@ Future<void> main() async {
   );
   // Opened by tapping a reminder after the app was closed: clean up.
   await pass.onResumed();
-  final stopwatch = SessionStopwatch()..attach();
+  final stopwatch = SessionStopwatch(startRunning: false)..attach();
   runApp(
     CalmIgApp(
       pass: pass,

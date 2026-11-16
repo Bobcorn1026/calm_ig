@@ -20,7 +20,28 @@ final _networkFailures = {
   WebResourceErrorType.BAD_SERVER_RESPONSE,
   WebResourceErrorType.CONNECTION_ABORTED,
   WebResourceErrorType.RESET,
+  // Wi-Fi that wants you to log in first (hotel, school) or a wrong clock.
+  WebResourceErrorType.SERVER_CERTIFICATE_UNTRUSTED,
+  WebResourceErrorType.SERVER_CERTIFICATE_HAS_BAD_DATE,
+  WebResourceErrorType.SERVER_CERTIFICATE_NOT_YET_VALID,
+  WebResourceErrorType.SERVER_CERTIFICATE_HAS_UNKNOWN_ROOT,
 };
+
+final _certificateFailures = {
+  WebResourceErrorType.SERVER_CERTIFICATE_UNTRUSTED,
+  WebResourceErrorType.SERVER_CERTIFICATE_HAS_BAD_DATE,
+  WebResourceErrorType.SERVER_CERTIFICATE_NOT_YET_VALID,
+  WebResourceErrorType.SERVER_CERTIFICATE_HAS_UNKNOWN_ROOT,
+};
+
+/// Where 重新載入 should go: the page that failed, or home if nothing has
+/// loaded yet (WKWebView can't reload an empty view). Null means a normal
+/// reload of the current page.
+Uri? reloadTarget({
+  required Uri? failedUrl,
+  required bool hasLoaded,
+  required Uri homeUrl,
+}) => failedUrl ?? (hasLoaded ? null : homeUrl);
 
 /// Whether this error should cover the page with the "load failed" view.
 bool isPageLoadFailure(
@@ -34,6 +55,9 @@ String loadFailureMessage(WebResourceErrorType type) {
       type == WebResourceErrorType.DATA_NOT_ALLOWED ||
       type == WebResourceErrorType.INTERNATIONAL_ROAMING_OFF) {
     return '沒有網路連線，連上之後再試一次。';
+  }
+  if (_certificateFailures.contains(type)) {
+    return '連線不安全。如果連的是學校或店家的 Wi-Fi，先在 Safari 登入 Wi-Fi，或確認手機時間正確。';
   }
   if (type == WebResourceErrorType.TIMEOUT) {
     return '網路太慢，IG 沒有回應。';
