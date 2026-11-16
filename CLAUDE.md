@@ -17,6 +17,10 @@
 - [x] 過濾：擋 `/reels`、`/explore`（改導搜尋）、推薦與贊助貼文；首頁導到 `/?variant=following`（`lib/filter/`、`assets/filters/instagram.js`）
 - [x] 放行原生 IG（5／10 分鐘）＋到期通知＋ App Intent「放行中嗎？」（`lib/pass/`、`ios/Runner/InstagramPassIntent.swift`）
 - [x] 捷徑自動化設定教學頁（`lib/onboarding/`，依 iOS 27 新版捷徑寫）
+- [x] 每日紀錄（`lib/stats/`）：今日使用時間碼錶、放行／超額／超時、被擋回次數、開場選擇；今日紀錄頁＋ fl_chart 趨勢圖（點碼錶進入）
+- [x] 每日放行額度（預設 3，用完要打「我真的需要發限動」，記為超額）
+- [x] 過濾失效警告（JS `checkHealth` → 上方列黃色驚嘆號）
+- [x] 開場「這次要做什麼？」（`lib/intent/`），選項可自訂
 - [ ] （第二階段，未決定）放行期間用 ReplayKit 截圖監控 Reels
 
 ## 技術決定
@@ -57,8 +61,12 @@ flutter build ios --release && xcrun devicectl device install app --device <iPho
 - **Info.plist 一定要有相機／麥克風／相簿的 UsageDescription**：IG 私訊上傳會開相機，少了 iOS 直接 SIGABRT（2026-11-12 實機 crash log）。`test/ios_privacy_keys_test.dart` 守著
 - 重新載入：下拉（PullToRefreshController＋alwaysBounceVertical）、上方 ↻ 鈕、載入失敗畫面。**WKWebView 從沒載入成功時 `reload()` 是 no-op** → `reloadTarget()` 改載首頁。
   WebContent 被 iOS 殺掉（實機 Jetsam log 很多）→ `onWebContentProcessDidTerminate` 自動重載。模擬器自動化測下拉要慢慢拖（快速 touch_path 不會觸發）
-- 碼錶（`lib/session/`）：只算前景時間，離開 ≥ 5 分鐘歸零；**放行期間不算離開**（使用者 2026-11-16 選「延續計時」：放行結束後 5 分鐘內回來就接續）。
-  狀態存 shared_preferences（`session_*`），iOS 在背景把 app 關掉也能接續
+- 碼錶＝**今天的 IG 時間**（`UsageTracker`）：清醒IG 在前景的時間＋放行時間（算到回來為止，最多放行結束後 5 分，`passGrace`）。
+  只在本地午夜歸零，沒有手動歸零（使用者要求）。跨午夜用 `splitByDay` 拆。狀態（離開時間、未結算的放行）存 prefs，被系統關掉也能結算
+- 每日紀錄存 prefs：`stats_<yyyy-MM-dd>`（Dart 寫 JSON）＋ `bounces_<day>`（**Swift App Intent 寫**，Dart 要 `prefs.reload()` 才讀得到；resume 時和紀錄頁都會 reload）。保留 120 天
+- 開場選單 `askIntent`：冷啟動或離開 ≥ 5 分鐘才出現，放行回來不問；選項存 `intent_options`（JSON），空清單＝不問
+- 過濾健康檢查：JS 每次換頁 5 秒後檢查（Reels 入口沒藏住／首頁貼文沒藏住／首頁找不到限動列），只在結果改變時回報 `{kind:'filter'}`
+- 測試坑：在 `setUp` 建立的物件不要先建 Future（跑在 FakeAsync 外，後續 await 不會被 pump）→ `UsageTracker._queue` 用 lazy 建立
 - 實機崩潰／被殺紀錄：`xcrun devicectl device info files --device <id> --domain-type systemCrashLogs` 列出，`device copy from` 抓回來
 - 未處理：「Use the app」橫幅（目前沒藏，可按 X 關）；送出私訊沒實測（不代使用者發訊息）
 - 除錯工具：debug build 有 `lib/browser/debug_js_bridge.dart`，把 JS 寫進 app 的 `tmp/debug_eval.js` 就能在 IG 頁面執行

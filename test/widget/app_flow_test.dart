@@ -119,7 +119,7 @@ void main() {
 
   testWidgets('over quota: type the sentence to go anyway', (tester) async {
     for (var i = 0; i < 3; i++) {
-      await stats.recordPass(DateTime.now(), overQuota: false);
+      await stats.recordPass(DateTime.now(), overQuota: false, quota: 3);
     }
     await tester.pumpWidget(app());
     await openPassSheet(tester);

@@ -86,11 +86,21 @@ class UsageTracker with WidgetsBindingObserver {
   Future<void> _enqueue(Future<void> Function() work) =>
       _queue = _idle.then((_) => work());
 
+  /// A pass that ran out while calm_ig was on screen is over with no
+  /// overtime: you were already back.
+  void _closeExpiredPass(DateTime now) {
+    final end = _passEnd;
+    if (end == null || now.isBefore(end)) return;
+    _passEnd = null;
+    _enqueue(() => _writeTime(_passEndKey, null));
+  }
+
   /// calm_ig left the foreground.
   Future<void> pause() {
     final since = _runningSince;
     if (since == null) return _idle;
     final now = _now();
+    _closeExpiredPass(now);
     _runningSince = null;
     _pausedAt = now;
     return _enqueue(() async {
@@ -107,7 +117,9 @@ class UsageTracker with WidgetsBindingObserver {
     _started = true;
     final pausedAt = _pausedAt;
     final passEnd = _passEnd;
-    final fromPass = passEnd != null;
+    // Back from a pass only within its counted window; later returns are
+    // ordinary ones.
+    final fromPass = passEnd != null && now.isBefore(passEnd.add(passGrace));
 
     var passTime = <String, Duration>{};
     Duration? overtime;
@@ -121,7 +133,8 @@ class UsageTracker with WidgetsBindingObserver {
       if (!now.isBefore(passEnd)) {
         _passEnd = null; // over: account for it once
         final over = until.difference(passEnd);
-        if (over > Duration.zero) overtime = over;
+        // No leave time (the app died while open): overtime is unknown.
+        if (over > Duration.zero && pausedAt != null) overtime = over;
       }
       // Still running (came back early): it stays open, and leaving again
       // keeps counting until its end.
@@ -135,7 +148,7 @@ class UsageTracker with WidgetsBindingObserver {
 
     _runningSince = now;
     _pausedAt = null;
-    final passClosed = fromPass && _passEnd == null;
+    final passClosed = passEnd != null && _passEnd == null;
     return _enqueue(() async {
       await stats.reload(); // pick up bounce counts from the App Intent
       await stats.addUsage(passTime);
@@ -149,6 +162,8 @@ class UsageTracker with WidgetsBindingObserver {
   /// A pass to the native app was started; it lasts until [end].
   Future<void> startPass(DateTime end) {
     _passEnd = end;
+    askIntent.value = false; // coming back from it never asks
+
     return _enqueue(() => _writeTime(_passEndKey, end));
   }
 
@@ -164,9 +179,14 @@ class UsageTracker with WidgetsBindingObserver {
     final since = _runningSince;
     if (since == null) return _idle;
     final now = _now();
+    _closeExpiredPass(now);
     _runningSince = now;
     return _enqueue(() => stats.addUsage(splitByDay(since, now)));
   }
+
+  /// Re-reads records written outside Dart (bounce counts), in line with
+  /// pending writes so a reload can't overwrite one in flight.
+  Future<void> refresh() => _enqueue(stats.reload);
 
   /// Starts listening to the app lifecycle. Lifecycle changes from before
   /// this call are not replayed, so start from the current state.

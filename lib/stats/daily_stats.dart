@@ -14,6 +14,7 @@ class DayStats {
     this.overtime = Duration.zero,
     this.bounces = 0,
     this.intents = const {},
+    this.quota,
   });
 
   /// `2026-11-16` (see [dayKey]).
@@ -38,12 +39,18 @@ class DayStats {
   /// "這次要做什麼？" answers: option label → times chosen.
   final Map<String, int> intents;
 
+  /// The pass quota that applied this day, saved with its first pass so
+  /// raising the quota later only takes effect the next day (see
+  /// [effectiveQuota]). Null before the first pass.
+  final int? quota;
+
   DayStats copyWith({
     Duration? usage,
     int? passes,
     int? overQuotaPasses,
     Duration? overtime,
     Map<String, int>? intents,
+    int? quota,
   }) => DayStats(
     day: day,
     usage: usage ?? this.usage,
@@ -52,6 +59,7 @@ class DayStats {
     overtime: overtime ?? this.overtime,
     bounces: bounces,
     intents: intents ?? this.intents,
+    quota: quota ?? this.quota,
   );
 
   Map<String, Object> toJson() => {
@@ -60,6 +68,7 @@ class DayStats {
     'overQuota': overQuotaPasses,
     'overtimeMs': overtime.inMilliseconds,
     'intents': intents,
+    'quota': ?quota,
   };
 
   factory DayStats.fromJson(
@@ -79,7 +88,16 @@ class DayStats {
       for (final e in ((json['intents'] as Map?) ?? const {}).entries)
         if (e.value is num) '${e.key}': (e.value as num).toInt(),
     },
+    quota: (json['quota'] as num?)?.toInt(),
   );
+}
+
+/// Today's pass quota: the setting, except that a raise made after the
+/// day's first pass waits until tomorrow (so it can't be used to skip the
+/// typed sentence). Lowering it applies at once.
+int effectiveQuota(DayStats day, int setting) {
+  final saved = day.quota;
+  return saved != null && saved < setting ? saved : setting;
 }
 
 /// Daily records in shared_preferences: `stats_<day>` (JSON, written here)
@@ -132,11 +150,17 @@ class StatsStore {
     }
   }
 
-  Future<void> recordPass(DateTime at, {required bool overQuota}) => _update(
+  /// [quota] is the quota that applied; the day keeps the first one.
+  Future<void> recordPass(
+    DateTime at, {
+    required bool overQuota,
+    required int quota,
+  }) => _update(
     dayKey(at),
     (s) => s.copyWith(
       passes: s.passes + 1,
       overQuotaPasses: s.overQuotaPasses + (overQuota ? 1 : 0),
+      quota: s.quota ?? quota,
     ),
   );
 

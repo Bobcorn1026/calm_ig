@@ -34,7 +34,7 @@ class PassFlow {
   /// the native app. Records the pass if Instagram opened.
   Future<void> run(BuildContext context) async {
     final today = stats.today(clock());
-    final quota = settings.passQuota;
+    final quota = effectiveQuota(today, settings.passQuota);
     final overQuota = today.passes >= quota;
 
     final length = await showModalBottomSheet<Duration>(
@@ -68,7 +68,7 @@ class PassFlow {
     final until = pass.until;
     if (opened && until != null) {
       await tracker.startPass(until);
-      await stats.recordPass(startedAt, overQuota: overQuota);
+      await stats.recordPass(startedAt, overQuota: overQuota, quota: quota);
     }
     if (!opened && context.mounted) {
       ScaffoldMessenger.of(context)

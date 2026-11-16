@@ -96,7 +96,7 @@ class _StatsPageState extends State<StatsPage> with WidgetsBindingObserver {
 
   /// Picks up bounce counts the iOS App Intent wrote since launch.
   Future<void> _reload() async {
-    await widget.stats.reload();
+    await widget.tracker.refresh();
     _redraw();
   }
 

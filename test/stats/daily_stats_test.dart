@@ -36,8 +36,8 @@ void main() {
   });
 
   test('passes, over-quota passes, overtime and intents', () async {
-    await store.recordPass(now, overQuota: false);
-    await store.recordPass(now, overQuota: true);
+    await store.recordPass(now, overQuota: false, quota: 3);
+    await store.recordPass(now, overQuota: true, quota: 3);
     await store.addOvertime(now, const Duration(minutes: 3));
     await store.recordIntent(now, '回私訊');
     await store.recordIntent(now, '回私訊');
@@ -53,7 +53,7 @@ void main() {
     await prefs.setInt('bounces_2026-11-16', 7);
     expect(store.today(now).bounces, 7);
     // Writing other stats doesn't touch it.
-    await store.recordPass(now, overQuota: false);
+    await store.recordPass(now, overQuota: false, quota: 3);
     expect(store.today(now).bounces, 7);
     expect(prefs.getInt('bounces_2026-11-16'), 7);
   });

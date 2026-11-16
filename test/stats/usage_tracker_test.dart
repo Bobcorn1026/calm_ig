@@ -104,6 +104,30 @@ void main() {
       expect(tracker.today, Duration.zero);
     });
 
+    test('back early, stayed past the end: no overtime, menu later', () async {
+      await startPass(min * 5);
+      advance(min * 2);
+      await tracker.resume(); // back early
+      tracker.askIntent.value = false;
+      advance(min * 10); // still in calm_ig when the pass ends
+      await tracker.pause();
+      expect(tracker.passEnd, isNull);
+      advance(const Duration(hours: 1));
+      await tracker.resume();
+      expect(stats.today(now).overtime, Duration.zero);
+      expect(tracker.today, min * (1 + 2 + 10));
+      expect(tracker.askIntent.value, isTrue);
+    });
+
+    test('checkpoint also closes a pass that ran out on screen', () async {
+      await startPass(min * 5);
+      advance(min * 2);
+      await tracker.resume();
+      advance(min * 4);
+      await tracker.checkpoint();
+      expect(tracker.passEnd, isNull);
+    });
+
     test('iOS closed the app during the pass: picked up on relaunch', () async {
       await startPass(min * 10);
       advance(min * 12);
@@ -152,6 +176,23 @@ void main() {
       await relaunched.resume();
       expect(relaunched.askIntent.value, isFalse);
     });
+  });
+
+  test('a pass started while the menu is up clears it', () async {
+    await tracker.resume();
+    expect(tracker.askIntent.value, isTrue);
+    await tracker.startPass(now.add(min * 5));
+    expect(tracker.askIntent.value, isFalse);
+  });
+
+  test('a return long after the pass window asks again', () async {
+    await tracker.resume();
+    await tracker.startPass(now.add(min * 10));
+    await tracker.pause();
+    advance(const Duration(hours: 11));
+    final relaunched = newTracker();
+    await relaunched.resume();
+    expect(relaunched.askIntent.value, isTrue);
   });
 
   test('checkpoint saves the running stretch', () async {
