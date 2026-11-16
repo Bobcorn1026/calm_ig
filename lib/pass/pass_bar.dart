@@ -2,21 +2,31 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../session/session_clock.dart';
+import '../session/session_stopwatch.dart';
 import 'pass_controller.dart';
 import 'pass_services.dart' show openAppSettings;
 
-/// The slim bar above the web view: app name, "post a story" pass button,
-/// help; or the countdown while a pass is running.
+/// The slim bar above the web view: app name and session stopwatch, "post a
+/// story" pass button, reload, help; or the countdown while a pass is running.
 class PassBar extends StatefulWidget {
   const PassBar({
     super.key,
     required this.pass,
     required this.onHelp,
+    this.stopwatch,
+    this.onReload,
     this.onOpenSettings = openAppSettings,
   });
 
   final PassController pass;
   final VoidCallback onHelp;
+
+  /// Shown as ⏱ next to the app name when given.
+  final SessionStopwatch? stopwatch;
+
+  /// Reload button (a backup for pages where pulling down doesn't work).
+  final VoidCallback? onReload;
 
   /// Opens iOS Settings (to turn notifications on); replaced in tests.
   final Future<void> Function() onOpenSettings;
@@ -150,12 +160,22 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
             style: Theme.of(context).textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
+          if (widget.stopwatch case final stopwatch?) ...[
+            const SizedBox(width: 10),
+            SessionClock(stopwatch: stopwatch),
+          ],
           const Spacer(),
           FilledButton.tonalIcon(
             onPressed: _choosePass,
             icon: const Icon(Icons.photo_camera_outlined, size: 18),
             label: const Text('發限動'),
           ),
+          if (widget.onReload case final onReload?)
+            IconButton(
+              tooltip: '重新載入',
+              onPressed: onReload,
+              icon: const Icon(Icons.refresh),
+            ),
           IconButton(
             tooltip: '捷徑設定教學',
             onPressed: widget.onHelp,

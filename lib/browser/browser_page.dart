@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../filter/filter_config.dart';
 import '../filter/filter_script.dart';
 import 'ig_web_view.dart';
+import 'reload_handle.dart';
 
 /// The main screen: a slim app bar on top of the filtered Instagram site.
 class BrowserPage extends StatefulWidget {
@@ -10,6 +11,7 @@ class BrowserPage extends StatefulWidget {
     super.key,
     this.config = const FilterConfig(),
     this.topBar,
+    this.reloadHandle,
     this.webViewBuilder,
   });
 
@@ -17,6 +19,9 @@ class BrowserPage extends StatefulWidget {
 
   /// Shown above the web view (pass controls, settings).
   final Widget? topBar;
+
+  /// Shared with the top bar's reload button.
+  final ReloadHandle? reloadHandle;
 
   /// Replaces the real web view in widget tests.
   final Widget Function(BuildContext context, ValueChanged<String> onBlocked)?
@@ -70,6 +75,7 @@ class _BrowserPageState extends State<BrowserPage> {
           config: widget.config,
           filterScript: script,
           onBlocked: _onBlocked,
+          reloadHandle: widget.reloadHandle,
         );
       },
     );

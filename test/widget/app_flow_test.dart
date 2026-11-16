@@ -1,8 +1,10 @@
 import 'package:calm_ig/browser/browser_page.dart';
+import 'package:calm_ig/browser/reload_handle.dart';
 import 'package:calm_ig/main.dart';
 import 'package:calm_ig/onboarding/shortcut_setup_page.dart';
 import 'package:calm_ig/pass/pass_bar.dart';
 import 'package:calm_ig/pass/pass_controller.dart';
+import 'package:calm_ig/session/session_stopwatch.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,10 +29,17 @@ void main() {
     blockCallbacks = [];
   });
 
-  Widget app({bool setupDone = true, VoidCallback? onSetupDone}) => CalmIgApp(
+  Widget app({
+    bool setupDone = true,
+    VoidCallback? onSetupDone,
+    SessionStopwatch? stopwatch,
+    ReloadHandle? reloadHandle,
+  }) => CalmIgApp(
     pass: pass,
     setupDone: setupDone,
     onSetupDone: () async => onSetupDone?.call(),
+    stopwatch: stopwatch,
+    reloadHandle: reloadHandle,
     webViewBuilder: (context, onBlocked) {
       blockCallbacks.add(onBlocked);
       return const Center(child: Text('fake web view'));
@@ -143,6 +152,33 @@ void main() {
     await tester.tap(find.text('我設定好了'));
     await tester.pumpAndSettle();
     expect(find.text('fake web view'), findsOneWidget);
+  });
+
+  testWidgets('top bar shows the session stopwatch next to the name', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 11, 16, 20);
+    final stopwatch = SessionStopwatch(clock: () => now);
+    await tester.pumpWidget(app(stopwatch: stopwatch));
+    expect(find.text('清醒IG'), findsOneWidget);
+    expect(find.text('0:00'), findsOneWidget);
+    now = now.add(const Duration(minutes: 3, seconds: 9));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('3:09'), findsOneWidget);
+    // Right of the name, on the same row.
+    final name = tester.getCenter(find.text('清醒IG'));
+    final clock = tester.getCenter(find.text('3:09'));
+    expect(clock.dx, greaterThan(name.dx));
+    expect((clock.dy - name.dy).abs(), lessThan(4));
+  });
+
+  testWidgets('reload button reaches the web view', (tester) async {
+    final handle = ReloadHandle();
+    var reloads = 0;
+    handle.attach(() async => reloads++);
+    await tester.pumpWidget(app(reloadHandle: handle));
+    await tester.tap(find.byTooltip('重新載入'));
+    expect(reloads, 1);
   });
 
   testWidgets('blocked pages show a toast', (tester) async {
