@@ -98,6 +98,34 @@ void main() {
     await _waitUntil(tester, () => blocked.isNotEmpty);
     expect(blocked.first, '/reels/C9abc/');
   });
+
+  testWidgets('a page that fails to load shows 重新載入', (tester) async {
+    // .invalid never resolves, so the main frame fails with HOST_LOOKUP.
+    const config = FilterConfig(
+      origin: 'https://calm-ig-offline.invalid',
+      allowedHosts: ['invalid'],
+    );
+    final script = await loadFilterScript(config);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IgWebView(
+            config: config,
+            filterScript: script,
+            onBlocked: (_) {},
+          ),
+        ),
+      ),
+    );
+    await _waitUntil(tester, () => find.text('IG 載入失敗').evaluate().isNotEmpty);
+    expect(find.text('重新載入'), findsOneWidget);
+
+    // Retrying hides the overlay, then the same failure brings it back.
+    await tester.tap(find.text('重新載入'));
+    await tester.pump();
+    expect(find.text('IG 載入失敗'), findsNothing);
+    await _waitUntil(tester, () => find.text('IG 載入失敗').evaluate().isNotEmpty);
+  });
 }
 
 Future<T> _waitFor<T>(WidgetTester tester, Future<T> future) async {

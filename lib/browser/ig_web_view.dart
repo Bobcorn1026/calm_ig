@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../filter/filter_config.dart';
 import '../filter/url_rules.dart';
 import 'debug_js_bridge.dart';
+import 'load_failure.dart';
 
 /// Instagram's mobile website inside a WKWebView, with the filter script
 /// injected before any page script runs.
@@ -45,15 +46,57 @@ class _IgWebViewState extends State<IgWebView> {
   InAppWebViewController? _controller;
   DebugJsBridge? _debugBridge;
 
+  /// Pull down at the top of the page to reload (also works on a blank or
+  /// half-loaded page, thanks to `alwaysBounceVertical`).
+  late final _pullToRefresh = PullToRefreshController(
+    settings: PullToRefreshSettings(color: Colors.grey),
+    onRefresh: _reload,
+  );
+
+  /// Set when the page failed to load; shows [LoadFailureView].
+  String? _failure;
+
+  /// The page that failed, so "重新載入" retries it instead of a blank page.
+  WebUri? _failedUrl;
+
   @override
   void dispose() {
     _debugBridge?.stop();
     super.dispose();
   }
 
+  Future<void> _reload() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final failed = _failedUrl;
+    setState(() {
+      _failure = null;
+      _failedUrl = null;
+    });
+    if (failed != null) {
+      await controller.loadUrl(urlRequest: URLRequest(url: failed));
+    } else {
+      await controller.reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final failure = _failure;
+    return Stack(
+      children: [
+        _buildWebView(),
+        if (failure != null)
+          Positioned.fill(
+            child: LoadFailureView(message: failure, onRetry: _reload),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWebView() {
     return InAppWebView(
+      pullToRefreshController: _pullToRefresh,
       initialUrlRequest: widget.debugInitialHtml == null
           ? URLRequest(url: WebUri(widget.config.homeUrl))
           : null,
@@ -77,6 +120,8 @@ class _IgWebViewState extends State<IgWebView> {
         // browser and keeps pushing the native app.
         applicationNameForUserAgent: 'Version/18.0 Mobile/15E148 Safari/604.1',
         isInspectable: kDebugMode,
+        // Lets pull-to-refresh work even when the page is blank or short.
+        alwaysBounceVertical: true,
       ),
       onWebViewCreated: (controller) {
         _controller = controller;
@@ -95,7 +140,26 @@ class _IgWebViewState extends State<IgWebView> {
           },
         );
       },
-      onLoadStop: (controller, _) => widget.onPageLoaded?.call(controller),
+      onLoadStop: (controller, _) {
+        _pullToRefresh.endRefreshing();
+        widget.onPageLoaded?.call(controller);
+      },
+      onReceivedError: (controller, request, error) {
+        _pullToRefresh.endRefreshing();
+        if (!isPageLoadFailure(
+          error.type,
+          isMainFrame: request.isForMainFrame ?? false,
+        )) {
+          return;
+        }
+        setState(() {
+          _failure = loadFailureMessage(error.type);
+          _failedUrl = request.url;
+        });
+      },
+      // iOS kills the page's process under memory pressure (e.g. while you
+      // are in the native Instagram app); the web view is then blank.
+      onWebContentProcessDidTerminate: (controller) => controller.reload(),
       shouldOverrideUrlLoading: (controller, action) async {
         final url = action.request.url;
         if (url == null) return NavigationActionPolicy.ALLOW;
