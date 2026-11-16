@@ -15,6 +15,8 @@
   var HIDDEN_LABELS = cfg.hiddenPostLabels || [];
   var END_LABELS = cfg.feedEndLabels || [];
   var FOLLOWING_LINK_TEXT = cfg.followingLinkText || 'Following →';
+  var HEALTH_DELAY = cfg.healthCheckDelayMs || 5000;
+  var STORY_SELECTOR = '[aria-label^="Story by"], [aria-label*="的限時動態"]';
 
   function hasPrefix(path, prefix) {
     var p = prefix.charAt(prefix.length - 1) === '/' ? prefix.slice(0, -1) : prefix;
@@ -85,6 +87,7 @@
       return;
     }
     scheduleSweep();
+    scheduleHealthCheck();
   }
   ['pushState', 'replaceState'].forEach(function (name) {
     var original = history[name];
@@ -142,7 +145,7 @@
       return;
     }
     root.setAttribute('data-calm-home', '');
-    var story = document.querySelector('[aria-label^="Story by"], [aria-label*="的限時動態"]');
+    var story = document.querySelector(STORY_SELECTOR);
     var article = document.querySelector('article');
     if (!story || !article) {
       // Layout not recognised: at least hide the posts themselves.
@@ -208,7 +211,73 @@
   });
 
   // Exposed for tests only.
-  window.__calmIg = { decide: decide, isHomeFeed: isHomeFeed, sweep: sweep };
+  // 5. Tell the app when the page no longer looks like what these rules
+  //    expect (Instagram changed its site), so it can show a warning.
+  //    Checked a few seconds after each page change, once things settled.
+  function isVisible(el) {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  function isBlockedHref(href) {
+    var url = parse(href);
+    return !!(url && decide(url.pathname));
+  }
+
+  function checkHealth() {
+    var issues = [];
+    // A visible "Reels" entry that our rules don't block: the path changed.
+    var links = document.querySelectorAll('a[href]');
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      var label = (a.getAttribute('aria-label') || a.textContent || '').trim();
+      if (/^reels$/i.test(label) && isVisible(a) &&
+          !isBlockedHref(a.getAttribute('href'))) {
+        issues.push('reels-link-visible');
+        break;
+      }
+    }
+    if (isHomeFeed(location.pathname, location.search)) {
+      var articles = document.querySelectorAll('article');
+      // Posts loaded but no stories row to anchor on: the layout changed.
+      if (articles.length && !document.querySelector(STORY_SELECTOR)) {
+        issues.push('home-no-stories');
+      }
+      for (var j = 0; j < articles.length; j++) {
+        if (isVisible(articles[j])) {
+          issues.push('home-feed-visible');
+          break;
+        }
+      }
+    }
+    report(issues);
+    return issues;
+  }
+
+  var lastHealth = null;
+  function report(issues) {
+    var key = issues.join(',');
+    if (key === lastHealth) return; // only when it changes
+    lastHealth = key;
+    try {
+      window.flutter_inappwebview.callHandler('calmIg', {
+        kind: 'filter', ok: issues.length === 0, issues: issues,
+      });
+    } catch (e) { /* not inside the app */ }
+  }
+
+  var healthTimer = null;
+  function scheduleHealthCheck() {
+    clearTimeout(healthTimer);
+    healthTimer = setTimeout(function () {
+      sweep(); // make sure hiding ran before judging it
+      checkHealth();
+    }, HEALTH_DELAY);
+  }
+
+  window.__calmIg = {
+    decide: decide, isHomeFeed: isHomeFeed, sweep: sweep, checkHealth: checkHealth,
+  };
 
   onRoute();
 })();

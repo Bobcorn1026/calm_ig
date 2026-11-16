@@ -20,8 +20,16 @@ const config = {
 // Objects made inside the vm sandbox have foreign prototypes; compare as JSON.
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
-function fakeBrowser(startHref) {
-  const calls = { replace: [], assign: [], notify: [] };
+// A fake element with just what checkHealth() reads.
+const el = ({ href = null, label = null, text = '', visible = true } = {}) => ({
+  getAttribute: (n) => (n === 'href' ? href : n === 'aria-label' ? label : null),
+  textContent: text,
+  getBoundingClientRect: () => (visible ? { width: 50, height: 50 } : { width: 0, height: 0 }),
+});
+
+function fakeBrowser(startHref, page = {}) {
+  const { links = [], articles = [], story = null } = page;
+  const calls = { replace: [], assign: [], notify: [], timers: [] };
   let href = new URL(startHref);
   const location = {
     get origin() { return href.origin; },
@@ -52,8 +60,11 @@ function fakeBrowser(startHref) {
       documentElement: element(),
       createElement: element,
       addEventListener() {},
-      querySelectorAll: () => [],
+      querySelectorAll: (sel) => (sel === 'a[href]' ? links : sel === 'article' ? articles : []),
+      querySelector: (sel) => (sel.includes('Story by') ? story : null),
     },
+    setTimeout: (fn) => calls.timers.push(fn),
+    clearTimeout: () => {},
     sessionStorage: {
       getItem: (k) => store.get(k) ?? null,
       setItem: (k, v) => store.set(k, v),
@@ -109,4 +120,51 @@ test('DMs, stories and the Following feed are left alone', () => {
   history.pushState({}, '', '/');
   assert.deepEqual(calls.replace, []);
   assert.deepEqual(calls.notify, []);
+});
+
+test('health: a normal home page reports ok', () => {
+  const { window, calls } = fakeBrowser('https://www.instagram.com/', {
+    links: [el({ href: '/reels/', label: 'Reels', visible: false })],
+    articles: [el({ visible: false })],
+    story: el({ label: 'Story by friend, not seen' }),
+  });
+  assert.deepEqual(plain(window.__calmIg.checkHealth()), []);
+  assert.deepEqual(plain(calls.notify.at(-1)), { kind: 'filter', ok: true, issues: [] });
+});
+
+test('health: Reels moved to a new path is caught', () => {
+  const { window } = fakeBrowser('https://www.instagram.com/direct/inbox/', {
+    links: [el({ href: '/clips/', label: 'Reels' })],
+  });
+  assert.deepEqual(plain(window.__calmIg.checkHealth()), ['reels-link-visible']);
+});
+
+test('health: home posts showing or no stories row is caught', () => {
+  const { window } = fakeBrowser('https://www.instagram.com/', {
+    articles: [el({ visible: true })],
+    story: null,
+  });
+  assert.deepEqual(plain(window.__calmIg.checkHealth()), ['home-no-stories', 'home-feed-visible']);
+});
+
+test('health: the Following feed may show posts', () => {
+  const { window } = fakeBrowser('https://www.instagram.com/?variant=following', {
+    articles: [el({ visible: true })],
+  });
+  assert.deepEqual(plain(window.__calmIg.checkHealth()), []);
+});
+
+test('health: only reports when the result changes', () => {
+  const { window, calls } = fakeBrowser('https://www.instagram.com/direct/inbox/');
+  window.__calmIg.checkHealth();
+  window.__calmIg.checkHealth();
+  assert.equal(calls.notify.filter((e) => e.kind === 'filter').length, 1);
+});
+
+test('health check is scheduled after a page change, not run at once', () => {
+  const { history, calls } = fakeBrowser('https://www.instagram.com/');
+  const before = calls.timers.length;
+  history.pushState({}, '', '/direct/inbox/');
+  assert.equal(calls.timers.length, before + 1);
+  assert.equal(calls.notify.filter((e) => e.kind === 'filter').length, 0);
 });

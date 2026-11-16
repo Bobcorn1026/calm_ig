@@ -7,10 +7,11 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../filter/filter_config.dart';
+import '../filter/filter_health.dart';
 import '../filter/url_rules.dart';
 import 'debug_js_bridge.dart';
 import 'load_failure.dart';
-import 'reload_handle.dart';
+import 'web_view_handle.dart';
 
 /// Instagram's mobile website inside a WKWebView, with the filter script
 /// injected before any page script runs.
@@ -20,7 +21,8 @@ class IgWebView extends StatefulWidget {
     required this.config,
     required this.filterScript,
     required this.onBlocked,
-    this.reloadHandle,
+    this.handle,
+    this.onFilterHealth,
     this.debugInitialHtml,
     this.onPageLoaded,
     this.onLoadFailed,
@@ -34,8 +36,11 @@ class IgWebView extends StatefulWidget {
   /// Called whenever a Reels / Explore page was stopped.
   final ValueChanged<String> onBlocked;
 
-  /// Lets the top bar's reload button reload this page.
-  final ReloadHandle? reloadHandle;
+  /// Lets the top bar and the "這次要做什麼？" menu reload or navigate.
+  final WebViewHandle? handle;
+
+  /// The filter script's report on whether it still recognises the page.
+  final ValueChanged<FilterHealth>? onFilterHealth;
 
   /// Integration tests load this HTML (as if served from [FilterConfig.origin])
   /// instead of the real site.
@@ -79,15 +84,28 @@ class _IgWebViewState extends State<IgWebView> {
   @override
   void initState() {
     super.initState();
-    widget.reloadHandle?.attach(_reload);
+    widget.handle?.attach(reload: _reload, open: _open);
   }
 
   @override
   void dispose() {
-    widget.reloadHandle?.detach(_reload);
+    widget.handle?.detach(_reload);
     _refreshTimeout?.cancel();
     _debugBridge?.stop();
     super.dispose();
+  }
+
+  /// Loads an instagram.com [path] (from the "這次要做什麼？" menu).
+  Future<void> _open(String path) async {
+    final controller = _controller;
+    if (controller == null || !mounted || !path.startsWith('/')) return;
+    setState(() {
+      _failure = null;
+      _failedUrl = null;
+    });
+    await controller.loadUrl(
+      urlRequest: URLRequest(url: WebUri('${widget.config.origin}$path')),
+    );
   }
 
   Future<void> _onPullToRefresh() async {
@@ -178,6 +196,9 @@ class _IgWebViewState extends State<IgWebView> {
             final event = args.isNotEmpty ? args.first : null;
             if (event is Map && event['kind'] == 'blocked') {
               widget.onBlocked('${event['path'] ?? ''}');
+            }
+            if (FilterHealth.fromMessage(event) case final health?) {
+              widget.onFilterHealth?.call(health);
             }
             return null;
           },

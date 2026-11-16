@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../filter/filter_config.dart';
+import '../filter/filter_health.dart';
 import '../filter/filter_script.dart';
 import 'ig_web_view.dart';
-import 'reload_handle.dart';
+import 'web_view_handle.dart';
 
 /// The main screen: a slim app bar on top of the filtered Instagram site.
 class BrowserPage extends StatefulWidget {
@@ -11,7 +12,9 @@ class BrowserPage extends StatefulWidget {
     super.key,
     this.config = const FilterConfig(),
     this.topBar,
-    this.reloadHandle,
+    this.overlay,
+    this.handle,
+    this.onFilterHealth,
     this.webViewBuilder,
   });
 
@@ -20,8 +23,14 @@ class BrowserPage extends StatefulWidget {
   /// Shown above the web view (pass controls, settings).
   final Widget? topBar;
 
-  /// Shared with the top bar's reload button.
-  final ReloadHandle? reloadHandle;
+  /// Drawn over the web view (the "這次要做什麼？" menu).
+  final Widget? overlay;
+
+  /// Lets the top bar and the menu reload or navigate the web view.
+  final WebViewHandle? handle;
+
+  /// The filter script's reports (shown as a warning in the top bar).
+  final ValueChanged<FilterHealth>? onFilterHealth;
 
   /// Replaces the real web view in widget tests.
   final Widget Function(BuildContext context, ValueChanged<String> onBlocked)?
@@ -54,7 +63,15 @@ class _BrowserPageState extends State<BrowserPage> {
         child: Column(
           children: [
             ?widget.topBar,
-            Expanded(child: _buildWebView(context)),
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _buildWebView(context)),
+                  if (widget.overlay case final overlay?)
+                    Positioned.fill(child: overlay),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -75,7 +92,8 @@ class _BrowserPageState extends State<BrowserPage> {
           config: widget.config,
           filterScript: script,
           onBlocked: _onBlocked,
-          reloadHandle: widget.reloadHandle,
+          handle: widget.handle,
+          onFilterHealth: widget.onFilterHealth,
         );
       },
     );

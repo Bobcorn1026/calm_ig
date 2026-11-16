@@ -12,6 +12,24 @@ enum InstagramPass {
     }
     return value.doubleValue / 1000 > now.timeIntervalSince1970
   }
+
+  /// `2026-11-16` in the local time zone — the same key format as Dart's
+  /// `dayKey()` (lib/stats/day_key.dart).
+  static func dayKey(_ date: Date = Date()) -> String {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = .current
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
+  }
+
+  /// Counts one more "native Instagram opened and sent back" for today.
+  /// Read in Dart as shared_preferences key `bounces_<day>`.
+  static func recordBounce(now: Date = Date(), defaults: UserDefaults = .standard) {
+    let key = "flutter.bounces_\(dayKey(now))"
+    defaults.set(defaults.integer(forKey: key) + 1, forKey: key)
+  }
 }
 
 /// Used by the Shortcuts automation "When Instagram is opened":
@@ -22,7 +40,10 @@ struct IsInstagramPassActiveIntent: AppIntent {
     "清醒IG 是否正在暫時放行原生 Instagram。是 → 不用導回清醒IG。")
 
   func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
-    return .result(value: InstagramPass.isActive())
+    let active = InstagramPass.isActive()
+    // No pass: the automation is about to send you back to calm_ig.
+    if !active { InstagramPass.recordBounce() }
+    return .result(value: active)
   }
 }
 

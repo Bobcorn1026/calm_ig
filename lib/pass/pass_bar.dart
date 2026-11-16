@@ -1,35 +1,38 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../session/session_clock.dart';
-import '../session/session_stopwatch.dart';
+import '../filter/filter_health.dart';
+import '../stats/usage_clock.dart';
 import 'pass_controller.dart';
-import 'pass_services.dart' show openAppSettings;
+import 'pass_flow.dart';
 
-/// The slim bar above the web view: app name and session stopwatch, "post a
-/// story" pass button, reload, help; or the countdown while a pass is running.
+/// The slim bar above the web view: app name, today's time (tap for the
+/// daily records), a filter warning when needed, "post a story" pass
+/// button, reload, help; or the countdown while a pass is running.
 class PassBar extends StatefulWidget {
   const PassBar({
     super.key,
-    required this.pass,
+    required this.flow,
     required this.onHelp,
-    this.stopwatch,
+    this.onOpenStats,
     this.onReload,
-    this.onOpenSettings = openAppSettings,
+    this.filterHealth,
   });
 
-  final PassController pass;
+  final PassFlow flow;
   final VoidCallback onHelp;
 
-  /// Shown as ⏱ next to the app name when given.
-  final SessionStopwatch? stopwatch;
+  /// Tapping today's time opens the daily records.
+  final VoidCallback? onOpenStats;
 
   /// Reload button (a backup for pages where pulling down doesn't work).
   final VoidCallback? onReload;
 
-  /// Opens iOS Settings (to turn notifications on); replaced in tests.
-  final Future<void> Function() onOpenSettings;
+  /// Shows a warning next to the name when the filter stops recognising
+  /// Instagram's pages.
+  final ValueListenable<FilterHealth?>? filterHealth;
 
   @override
   State<PassBar> createState() => _PassBarState();
@@ -38,18 +41,20 @@ class PassBar extends StatefulWidget {
 class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
   Timer? _ticker;
 
+  PassController get _pass => widget.flow.pass;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    widget.pass.addListener(_syncTicker);
+    _pass.addListener(_syncTicker);
     _syncTicker();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    widget.pass.removeListener(_syncTicker);
+    _pass.removeListener(_syncTicker);
     _ticker?.cancel();
     super.dispose();
   }
@@ -58,14 +63,14 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Coming back from Instagram: stop leftover reminders if the pass is
     // over, and redraw with the real remaining time.
-    if (state == AppLifecycleState.resumed) widget.pass.onResumed();
+    if (state == AppLifecycleState.resumed) _pass.onResumed();
   }
 
   void _syncTicker() {
-    if (widget.pass.isActive) {
+    if (_pass.isActive) {
       _ticker ??= Timer.periodic(
         const Duration(seconds: 1),
-        (_) => widget.pass.tick(),
+        (_) => _pass.tick(),
       );
     } else {
       _ticker?.cancel();
@@ -73,83 +78,12 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _choosePass() async {
-    final length = await showModalBottomSheet<Duration>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: Text(
-                '暫時放行原生 Instagram',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
-              child: Text('這段時間打開原生 IG 不會被導回來，時間到會通知你。'),
-            ),
-            for (final length in passLengths)
-              ListTile(
-                leading: const Icon(Icons.timer_outlined),
-                title: Text('${length.inMinutes} 分鐘'),
-                onTap: () => Navigator.pop(context, length),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (length == null || !mounted) return;
-    if (!await widget.pass.canRemind()) {
-      if (!mounted) return;
-      final goAnyway = await _askWithoutReminders();
-      if (goAnyway != true) return;
-    }
-    final opened = await widget.pass.start(length);
-    // Time in the native app during a pass doesn't end the session: coming
-    // back within 5 minutes after the pass continues the stopwatch.
-    final until = widget.pass.until;
-    if (opened && until != null) widget.stopwatch?.allowBreakUntil(until);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('找不到 Instagram app')));
-    }
-  }
-
-  /// Notifications are off: reminders can't show. Returns true to open
-  /// Instagram anyway.
-  Future<bool?> _askWithoutReminders() => showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('通知被關掉了'),
-      content: const Text('這樣放行時間到了，清醒IG 沒辦法提醒你回來。\n要先去設定打開通知嗎？'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('照樣放行'),
-        ),
-        FilledButton(
-          onPressed: () {
-            Navigator.pop(context, false);
-            widget.onOpenSettings();
-          },
-          child: const Text('去設定'),
-        ),
-      ],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.pass,
+      listenable: _pass,
       builder: (context, _) =>
-          widget.pass.isActive ? _active(context) : _idle(context),
+          _pass.isActive ? _active(context) : _idle(context),
     );
   }
 
@@ -159,18 +93,33 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
       child: Row(
         children: [
           const SizedBox(width: 16),
-          Text(
-            '清醒IG',
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
+          // Name, time and warning shrink together on narrow screens or
+          // with large text instead of overflowing.
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '清醒IG',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(width: 6),
+                  UsageClock(
+                    tracker: widget.flow.tracker,
+                    onTap: widget.onOpenStats,
+                  ),
+                  if (widget.filterHealth case final health?)
+                    _FilterWarning(health: health),
+                ],
+              ),
+            ),
           ),
-          if (widget.stopwatch case final stopwatch?) ...[
-            const SizedBox(width: 10),
-            SessionClock(stopwatch: stopwatch),
-          ],
-          const Spacer(),
           FilledButton.tonalIcon(
-            onPressed: _choosePass,
+            onPressed: () => widget.flow.run(context),
             icon: const Icon(Icons.photo_camera_outlined, size: 18),
             label: const Text('發限動'),
           ),
@@ -203,13 +152,64 @@ class _PassBarState extends State<PassBar> with WidgetsBindingObserver {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '原生 IG 放行中 · 剩 ${formatRemaining(widget.pass.remaining)}',
+              '原生 IG 放行中 · 剩 ${formatRemaining(_pass.remaining)}',
               style: TextStyle(color: scheme.onTertiaryContainer),
             ),
           ),
-          TextButton(onPressed: widget.pass.end, child: const Text('結束')),
+          TextButton(onPressed: widget.flow.end, child: const Text('結束')),
         ],
       ),
+    );
+  }
+}
+
+/// A small amber icon, shown only while the filter reports problems.
+class _FilterWarning extends StatelessWidget {
+  const _FilterWarning({required this.health});
+
+  final ValueListenable<FilterHealth?> health;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<FilterHealth?>(
+      valueListenable: health,
+      builder: (context, value, _) {
+        if (value == null || value.ok) return const SizedBox.shrink();
+        return Semantics(
+          button: true,
+          label: '過濾可能失效',
+          excludeSemantics: true,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                icon: const Icon(Icons.warning_amber_rounded),
+                title: const Text('過濾可能失效'),
+                content: Text(
+                  'IG 的網頁好像改版了，清醒IG 認不太出來：\n\n'
+                  '${value.descriptions.map((d) => '• $d').join('\n')}\n\n'
+                  '跟 Claude 說「清醒IG 過濾失效」，請它更新過濾規則。',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('知道了'),
+                  ),
+                ],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                size: 18,
+                color: Colors.amber.shade700,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

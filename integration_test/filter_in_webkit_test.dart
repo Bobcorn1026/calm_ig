@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:calm_ig/browser/ig_web_view.dart';
 import 'package:calm_ig/filter/filter_config.dart';
+import 'package:calm_ig/filter/filter_health.dart';
 import 'package:calm_ig/filter/filter_script.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -97,6 +98,45 @@ void main() {
     await js('history.pushState({}, "", "/reels/C9abc/")');
     await _waitUntil(tester, () => blocked.isNotEmpty);
     expect(blocked.first, '/reels/C9abc/');
+  });
+
+  testWidgets('filter health reaches Flutter: ok, then a broken layout', (
+    tester,
+  ) async {
+    const config = FilterConfig();
+    final script = await loadFilterScript(config);
+    final loaded = Completer<InAppWebViewController>();
+    final reports = <FilterHealth>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IgWebView(
+            config: config,
+            filterScript: script,
+            onBlocked: (_) {},
+            onFilterHealth: reports.add,
+            debugInitialHtml: fakeIgHtml,
+            onPageLoaded: (c) {
+              if (!loaded.isCompleted) loaded.complete(c);
+            },
+          ),
+        ),
+      ),
+    );
+    final controller = await _waitFor(tester, loaded.future);
+    Future<Object?> js(String source) =>
+        _waitFor(tester, controller.evaluateJavascript(source: source));
+
+    // The fake home page is laid out like the real one: all good.
+    await js('window.__calmIg.sweep(); window.__calmIg.checkHealth()');
+    await _waitUntil(tester, () => reports.isNotEmpty);
+    expect(reports.last.ok, isTrue);
+
+    // Instagram drops the stories row: posts lose their anchor.
+    await js('document.getElementById("stories-row").remove()');
+    await js('window.__calmIg.sweep(); window.__calmIg.checkHealth()');
+    await _waitUntil(tester, () => !reports.last.ok);
+    expect(reports.last.issues, contains('home-no-stories'));
   });
 
   testWidgets('a page that fails to load shows 重新載入', (tester) async {
