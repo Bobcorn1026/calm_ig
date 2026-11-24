@@ -27,6 +27,7 @@
 
 - 平台：iOS only（Flutter），最低 iOS 17（App Intent 需要）
 - Bundle ID：`com.satori.calmIg`
+- GitHub：公開 repo `Bobcorn1026/calm_ig`（origin/main）。這個 repo 的 git `user.email` 設成 GitHub noreply 地址，不要改回個人 email（公開會外洩）
 - 不用 Screen Time API（Family Controls）：免費 Apple ID 不能用，而且只能整個 app 擋
 - 不做全天截圖監控：ReplayKit 要手動開始、耗電發熱、會被系統殺掉、也關不掉 IG
 - 過濾規則只有一份：`FilterConfig`（Dart）→ JSON 注入 JS；`test/js/filter_rules.test.mjs`（Node）確保兩邊一致
